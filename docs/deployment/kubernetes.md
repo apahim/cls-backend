@@ -1,16 +1,17 @@
 # Kubernetes Deployment
 
-This guide provides comprehensive instructions for deploying CLS Backend to Kubernetes clusters with the simplified single-tenant architecture.
+This guide provides comprehensive instructions for deploying CLS Backend to Kubernetes clusters with the simplified single-tenant architecture and Workload Identity for secure GCP integration.
 
 ## Prerequisites
 
 ### Required Infrastructure
 
 - **Kubernetes 1.20+** cluster with RBAC enabled
+- **GKE cluster with Workload Identity enabled** (recommended for GCP)
 - **PostgreSQL 13+** database (managed or self-hosted)
 - **Google Cloud Pub/Sub** with enabled APIs
-- **Google Cloud Service Account** with Pub/Sub permissions
-- **Container Registry** access (GCR or Docker Hub)
+- **Google Cloud Service Account** configured for Workload Identity
+- **Container Registry** access (GCR or Artifact Registry)
 
 ### Required Tools
 
@@ -30,16 +31,28 @@ This guide provides comprehensive instructions for deploying CLS Backend to Kube
 export PROJECT_ID="your-gcp-project"
 
 # Build for linux/amd64 (required for most Kubernetes nodes)
-podman build --platform linux/amd64 \
-  -t gcr.io/${PROJECT_ID}/cls-backend:latest .
+REGISTRY_AUTH_FILE=/path/to/.config/containers/auth.json \
+  podman build --platform linux/amd64 \
+  -t gcr.io/${PROJECT_ID}/cls-backend:error-handling-fix-$(date +%Y%m%d-%H%M%S) .
 
-# Authenticate with GCR
-gcloud auth print-access-token | \
-  podman login -u oauth2accesstoken --password-stdin gcr.io
+# Authenticate with GCR using registry auth file
+REGISTRY_AUTH_FILE=/path/to/.config/containers/auth.json \
+  podman login gcr.io
 
 # Push to registry
-podman push gcr.io/${PROJECT_ID}/cls-backend:latest
+REGISTRY_AUTH_FILE=/path/to/.config/containers/auth.json \
+  podman push gcr.io/${PROJECT_ID}/cls-backend:error-handling-fix-$(date +%Y%m%d-%H%M%S)
 ```
+
+**Current Recommended Image**: `gcr.io/${PROJECT_ID}/cls-backend:error-handling-fix-20251017-122651`
+
+**Features in this image**:
+- ✅ **Fixed error handling** - Returns 409 Conflict for duplicate cluster names instead of 500 errors
+- ✅ **PostgreSQL constraint violations** properly detected and converted to appropriate HTTP status codes
+- ✅ **Client isolation** with user email authentication
+- ✅ **Simplified single-tenant architecture**
+- ✅ **Fan-out Pub/Sub architecture**
+- ✅ **Kubernetes-like status structures**
 
 #### Verify Image
 
@@ -63,9 +76,33 @@ gcloud services enable pubsub.googleapis.com --project=${PROJECT_ID}
 gcloud services list --enabled --project=${PROJECT_ID} | grep pubsub
 ```
 
-#### Create Service Account
+#### Setup Workload Identity (Recommended)
+
+**For GKE with Workload Identity enabled**:
 
 ```bash
+# Create Google Cloud service account
+gcloud iam service-accounts create cls-backend \
+  --display-name="CLS Backend Service Account" \
+  --project=${PROJECT_ID}
+
+# Grant Pub/Sub permissions
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+  --member="serviceAccount:cls-backend@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/pubsub.editor"
+
+# Allow Kubernetes service account to impersonate Google Cloud service account
+gcloud iam service-accounts add-iam-policy-binding \
+  cls-backend@${PROJECT_ID}.iam.gserviceaccount.com \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:${PROJECT_ID}.svc.id.goog[cls-system/cls-backend]" \
+  --project=${PROJECT_ID}
+```
+
+**Alternative: Service Account Key (Less Secure)**:
+
+```bash
+# Only use if Workload Identity is not available
 # Create service account
 gcloud iam service-accounts create cls-backend-service \
   --display-name="CLS Backend Service Account" \
@@ -142,6 +179,26 @@ kubectl get namespaces | grep cls-system
 
 #### Create Secrets
 
+**For Workload Identity (Recommended)**:
+
+```bash
+# Create minimal secrets (no service account key needed)
+kubectl create secret generic cls-backend-secrets \
+  --from-literal=GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
+  --namespace=cls-system
+
+# For in-cluster PostgreSQL, the postgres-secret is created automatically via postgres.yaml
+# For external PostgreSQL, create database URL secret separately:
+# kubectl create secret generic postgres-secret \
+#   --from-literal=DATABASE_URL="${DATABASE_URL}" \
+#   --namespace=cls-system
+
+# Verify secrets
+kubectl get secrets -n cls-system
+```
+
+**For Service Account Key (Alternative)**:
+
 ```bash
 # Create database and GCP project secret
 kubectl create secret generic cls-backend-secrets \
@@ -177,11 +234,17 @@ kubectl get configmap,serviceaccount -n cls-system
 # Update deployment image reference
 sed -i "s|gcr.io/PROJECT_ID|gcr.io/${PROJECT_ID}|g" deploy/kubernetes/deployment.yaml
 
+# Update to use the latest error-handling-fix image
+sed -i "s|cls-backend:.*|cls-backend:error-handling-fix-20251017-122651|g" deploy/kubernetes/deployment.yaml
+
 # Deploy application
 kubectl apply -f deploy/kubernetes/deployment.yaml
 
-# Create service
+# Create service (ClusterIP for testing, LoadBalancer for external access)
 kubectl apply -f deploy/kubernetes/service.yaml
+
+# Optional: Create LoadBalancer service for external access
+# kubectl apply -f deploy/kubernetes/loadbalancer-service.yaml
 
 # Wait for deployment to be ready
 kubectl wait --for=condition=available --timeout=300s \
@@ -232,6 +295,35 @@ curl http://localhost:8080/api/v1/info
 # Test cluster API (simplified single-tenant)
 curl -H "X-User-Email: user@example.com" \
   http://localhost:8080/api/v1/clusters
+
+# Test error handling (should return 409 Conflict for duplicates)
+curl -X POST -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
+  -d '{"name": "test-cluster", "target_project_id": "test"}' \
+  http://localhost:8080/api/v1/clusters
+
+# Attempt to create duplicate (should return 409 instead of 500)
+curl -v -X POST -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
+  -d '{"name": "test-cluster", "target_project_id": "test"}' \
+  http://localhost:8080/api/v1/clusters
+```
+
+### Error Handling Verification
+
+The latest image includes improved error handling:
+
+```bash
+# Expected response for duplicate cluster names:
+# HTTP/1.1 409 Conflict
+# {"error":{"type":"conflict","code":"CLUSTER_NAME_EXISTS","message":"A cluster with this name already exists"}}
+
+# Test client isolation (different users can use same name):
+curl -X POST -H "Content-Type: application/json" \
+  -H "X-User-Email: user2@example.com" \
+  -d '{"name": "test-cluster", "target_project_id": "test"}' \
+  http://localhost:8080/api/v1/clusters
+# Should succeed with 201 Created
 ```
 
 ## Configuration Management
@@ -288,6 +380,8 @@ data:
 
 ### Service Account Configuration
 
+**For Workload Identity (Recommended)**:
+
 ```yaml
 # deploy/kubernetes/serviceaccount.yaml
 apiVersion: v1
@@ -295,8 +389,31 @@ kind: ServiceAccount
 metadata:
   name: cls-backend
   namespace: cls-system
+  labels:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: serviceaccount
   annotations:
-    iam.gke.io/gcp-service-account: cls-backend-service@PROJECT_ID.iam.gserviceaccount.com
+    # For Google Cloud Workload Identity
+    iam.gke.io/gcp-service-account: cls-backend@PROJECT_ID.iam.gserviceaccount.com
+```
+
+**Benefits of Workload Identity**:
+- ✅ No service account keys to manage
+- ✅ Automatic credential rotation
+- ✅ Follows principle of least privilege
+- ✅ Better security posture
+- ✅ No volume mounts needed for authentication
+
+**For Service Account Key (Alternative)**:
+
+```yaml
+# deploy/kubernetes/serviceaccount.yaml - with volume mounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cls-backend
+  namespace: cls-system
+# No Workload Identity annotation needed
 ```
 
 ## Resource Management
@@ -378,6 +495,62 @@ readinessProbe:
   failureThreshold: 3
 ```
 
+## Service Configuration
+
+### Main Application Service
+
+**ClusterIP Service (Recommended for testing and internal access)**:
+
+```yaml
+# deploy/kubernetes/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cls-backend
+  namespace: cls-system
+  labels:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: api-server
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: api-server
+```
+
+**LoadBalancer Service (For external access)**:
+
+```yaml
+# deploy/kubernetes/loadbalancer-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cls-backend-lb
+  namespace: cls-system
+  labels:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: loadbalancer
+  annotations:
+    # Allow traffic from Google Cloud API Gateway ranges
+    cloud.google.com/load-balancer-type: "External"
+    service.beta.kubernetes.io/load-balancer-source-ranges: "130.211.0.0/22,35.191.0.0/16"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: api-server
+```
+
 ### Metrics Collection
 
 ```yaml
@@ -388,7 +561,7 @@ metadata:
   name: cls-backend-metrics
   namespace: cls-system
   labels:
-    app: cls-backend
+    app.kubernetes.io/name: cls-backend
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8081"
@@ -399,7 +572,8 @@ spec:
     port: 8081
     targetPort: 8081
   selector:
-    app: cls-backend
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: api-server
 ```
 
 ### Log Aggregation
