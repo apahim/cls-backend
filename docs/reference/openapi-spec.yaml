@@ -1,0 +1,1308 @@
+swagger: "2.0"
+info:
+  title: "CLS Backend API"
+  description: "Cluster Lifecycle Service Backend - Simplified Single-Tenant Architecture"
+  version: "1.0.0"
+  contact:
+    name: "CLS Backend Team"
+    url: "https://github.com/your-org/cls-backend"
+  license:
+    name: "MIT"
+    url: "https://opensource.org/licenses/MIT"
+
+host: "YOUR_API_GATEWAY_HOST"
+basePath: "/api/v1"
+
+schemes:
+  - "https"
+
+consumes:
+  - "application/json"
+
+produces:
+  - "application/json"
+
+# Security definitions for Google Cloud user authentication
+securityDefinitions:
+  # Google OAuth2 with user authentication
+  google_oauth2:
+    type: oauth2
+    authorizationUrl: https://accounts.google.com/o/oauth2/auth
+    flow: implicit
+    x-google-jwks_uri: https://www.googleapis.com/oauth2/v3/certs
+    x-google-audiences: "32555940559.apps.googleusercontent.com"
+    scopes:
+      openid: OpenID Connect scope
+      email: Access to user email address
+      profile: Access to user profile information
+    description: |
+      Google OAuth2 authentication with email scope.
+      Users must be authenticated via gcloud and have valid access tokens.
+
+  # For development/testing (optional fallback)
+  api_key:
+    type: "apiKey"
+    name: "key"
+    in: "query"
+
+# Global security requirement - Google OAuth2 required for production
+security:
+  - google_oauth2: ["openid", "email", "profile"]
+
+# Path definitions
+paths:
+  # Health check (public endpoint)
+  /../../health:
+    get:
+      summary: "Health Check"
+      description: "Check service health status"
+      operationId: "healthCheck"
+      security: []  # Public endpoint
+      responses:
+        200:
+          description: "Service is healthy"
+          schema:
+            $ref: "#/definitions/HealthResponse"
+        503:
+          description: "Service is unhealthy"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+  # Clusters
+  /clusters:
+    get:
+      summary: "List Clusters"
+      description: "List all clusters with optional filtering and pagination"
+      operationId: "listClusters"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "limit"
+          in: "query"
+          type: "integer"
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: "Maximum number of results"
+        - name: "offset"
+          in: "query"
+          type: "integer"
+          minimum: 0
+          default: 0
+          description: "Number of results to skip"
+        - name: "platform"
+          in: "query"
+          type: "string"
+          enum: ["gcp", "aws", "azure"]
+          description: "Filter by platform type"
+        - name: "status"
+          in: "query"
+          type: "string"
+          enum: ["Pending", "Progressing", "Ready", "Failed"]
+          description: "Filter by status phase"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        200:
+          description: "List of clusters"
+          schema:
+            $ref: "#/definitions/ClusterListResponse"
+        400:
+          description: "Invalid request parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    post:
+      summary: "Create Cluster"
+      description: "Create a new cluster"
+      operationId: "createCluster"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/CreateClusterRequest"
+      responses:
+        201:
+          description: "Cluster created successfully"
+          schema:
+            $ref: "#/definitions/Cluster"
+        400:
+          description: "Invalid request body"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        409:
+          description: "Cluster already exists"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+  /clusters/{clusterId}:
+    get:
+      summary: "Get Cluster"
+      description: "Get cluster details by ID"
+      operationId: "getCluster"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "clusterId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "Cluster UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        200:
+          description: "Cluster details"
+          schema:
+            $ref: "#/definitions/Cluster"
+        404:
+          description: "Cluster not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    put:
+      summary: "Update Cluster"
+      description: "Update cluster specification"
+      operationId: "updateCluster"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "clusterId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "Cluster UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/UpdateClusterRequest"
+      responses:
+        200:
+          description: "Cluster updated successfully"
+          schema:
+            $ref: "#/definitions/Cluster"
+        400:
+          description: "Invalid request body"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Cluster not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    delete:
+      summary: "Delete Cluster"
+      description: "Delete a cluster"
+      operationId: "deleteCluster"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "clusterId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "Cluster UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+        - name: "force"
+          in: "query"
+          type: "boolean"
+          default: false
+          description: "Force delete regardless of state"
+      responses:
+        204:
+          description: "Cluster deleted successfully"
+        404:
+          description: "Cluster not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+  /clusters/{clusterId}/status:
+    get:
+      summary: "Get Cluster Status"
+      description: "Get detailed cluster status including controller status"
+      operationId: "getClusterStatus"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "clusterId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "Cluster UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        200:
+          description: "Cluster status information"
+          schema:
+            $ref: "#/definitions/ClusterStatusResponse"
+        404:
+          description: "Cluster not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    put:
+      summary: "Update Cluster Status"
+      description: "Update cluster status (for controllers)"
+      operationId: "updateClusterStatus"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "clusterId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "Cluster UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "Controller email for authorization"
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/UpdateClusterStatusRequest"
+      responses:
+        200:
+          description: "Status updated successfully"
+          schema:
+            $ref: "#/definitions/UpdateStatusResponse"
+        400:
+          description: "Invalid request body"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Cluster not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+  # NodePools
+  /nodepools:
+    get:
+      summary: "List NodePools"
+      description: "List all nodepools with optional filtering and pagination"
+      operationId: "listNodePools"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "limit"
+          in: "query"
+          type: "integer"
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: "Maximum number of results"
+        - name: "offset"
+          in: "query"
+          type: "integer"
+          minimum: 0
+          default: 0
+          description: "Number of results to skip"
+        - name: "status"
+          in: "query"
+          type: "string"
+          description: "Filter by status phase"
+        - name: "health"
+          in: "query"
+          type: "string"
+          description: "Filter by health status"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        200:
+          description: "List of nodepools"
+          schema:
+            $ref: "#/definitions/NodePoolListResponse"
+        400:
+          description: "Invalid request parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    post:
+      summary: "Create NodePool"
+      description: "Create a new nodepool"
+      operationId: "createNodePool"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/CreateNodePoolRequest"
+      responses:
+        201:
+          description: "NodePool created successfully"
+          schema:
+            $ref: "#/definitions/NodePool"
+        400:
+          description: "Invalid request body"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+  /nodepools/{nodepoolId}:
+    get:
+      summary: "Get NodePool"
+      description: "Get nodepool details by ID"
+      operationId: "getNodePool"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "nodepoolId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "NodePool UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        200:
+          description: "NodePool details"
+          schema:
+            $ref: "#/definitions/NodePool"
+        404:
+          description: "NodePool not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    put:
+      summary: "Update NodePool"
+      description: "Update nodepool specification"
+      operationId: "updateNodePool"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "nodepoolId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "NodePool UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/UpdateNodePoolRequest"
+      responses:
+        200:
+          description: "NodePool updated successfully"
+          schema:
+            $ref: "#/definitions/NodePool"
+        400:
+          description: "Invalid request body"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "NodePool not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    delete:
+      summary: "Delete NodePool"
+      description: "Delete a nodepool"
+      operationId: "deleteNodePool"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "nodepoolId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "NodePool UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        204:
+          description: "NodePool deleted successfully"
+        404:
+          description: "NodePool not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+  /nodepools/{nodepoolId}/status:
+    get:
+      summary: "Get NodePool Status"
+      description: "Get detailed nodepool status"
+      operationId: "getNodePoolStatus"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "nodepoolId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "NodePool UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "User email for authorization"
+      responses:
+        200:
+          description: "NodePool status information"
+          schema:
+            $ref: "#/definitions/NodePoolStatusResponse"
+        404:
+          description: "NodePool not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+    put:
+      summary: "Update NodePool Status"
+      description: "Update nodepool status (for controllers)"
+      operationId: "updateNodePoolStatus"
+      security:
+        - google_oauth2: ["openid", "email", "profile"]
+      parameters:
+        - name: "nodepoolId"
+          in: "path"
+          type: "string"
+          required: true
+          description: "NodePool UUID"
+        - name: "X-User-Email"
+          in: "header"
+          type: "string"
+          required: true
+          description: "Controller email for authorization"
+        - name: "body"
+          in: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/UpdateNodePoolStatusRequest"
+      responses:
+        200:
+          description: "Status updated successfully"
+          schema:
+            $ref: "#/definitions/UpdateStatusResponse"
+        400:
+          description: "Invalid request body"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "NodePool not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Unauthorized"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+      x-google-backend:
+        address: "YOUR_BACKEND_SERVICE_URL"
+        path_translation: "APPEND_PATH_TO_ADDRESS"
+
+# Data model definitions
+definitions:
+  # Health check response
+  HealthResponse:
+    type: "object"
+    required:
+      - "status"
+      - "timestamp"
+    properties:
+      status:
+        type: "string"
+        enum: ["healthy", "degraded", "unhealthy"]
+      timestamp:
+        type: "string"
+        format: "date-time"
+      service:
+        type: "string"
+      components:
+        type: "object"
+        additionalProperties:
+          type: "string"
+
+  # Error response
+  ErrorResponse:
+    type: "object"
+    required:
+      - "error"
+    properties:
+      error:
+        type: "object"
+        required:
+          - "code"
+          - "message"
+        properties:
+          code:
+            type: "string"
+          message:
+            type: "string"
+          details:
+            type: "string"
+
+  # Cluster definitions
+  Cluster:
+    type: "object"
+    required:
+      - "id"
+      - "name"
+      - "generation"
+      - "resource_version"
+      - "spec"
+      - "status"
+      - "created_at"
+      - "updated_at"
+      - "created_by"
+    properties:
+      id:
+        type: "string"
+        format: "uuid"
+      name:
+        type: "string"
+        minLength: 1
+        maxLength: 63
+        pattern: "^[a-z0-9-]+$"
+      generation:
+        type: "integer"
+        format: "int64"
+        minimum: 1
+      resource_version:
+        type: "string"
+      spec:
+        $ref: "#/definitions/ClusterSpec"
+      status:
+        $ref: "#/definitions/ClusterStatus"
+      created_at:
+        type: "string"
+        format: "date-time"
+      updated_at:
+        type: "string"
+        format: "date-time"
+      created_by:
+        type: "string"
+        format: "email"
+
+  ClusterSpec:
+    type: "object"
+    required:
+      - "platform"
+    properties:
+      infraID:
+        type: "string"
+      platform:
+        $ref: "#/definitions/PlatformSpec"
+      release:
+        $ref: "#/definitions/ReleaseSpec"
+      networking:
+        $ref: "#/definitions/NetworkingSpec"
+      dns:
+        $ref: "#/definitions/DNSSpec"
+
+  PlatformSpec:
+    type: "object"
+    required:
+      - "type"
+    properties:
+      type:
+        type: "string"
+        enum: ["gcp", "aws", "azure"]
+      gcp:
+        $ref: "#/definitions/GCPPlatformSpec"
+      aws:
+        $ref: "#/definitions/AWSPlatformSpec"
+      azure:
+        $ref: "#/definitions/AzurePlatformSpec"
+
+  GCPPlatformSpec:
+    type: "object"
+    properties:
+      projectID:
+        type: "string"
+      region:
+        type: "string"
+      zone:
+        type: "string"
+      network:
+        type: "string"
+      subnet:
+        type: "string"
+
+  AWSPlatformSpec:
+    type: "object"
+    properties:
+      region:
+        type: "string"
+      availabilityZones:
+        type: "array"
+        items:
+          type: "string"
+      vpcId:
+        type: "string"
+      subnetIds:
+        type: "array"
+        items:
+          type: "string"
+
+  AzurePlatformSpec:
+    type: "object"
+    properties:
+      region:
+        type: "string"
+      resourceGroup:
+        type: "string"
+      vnetName:
+        type: "string"
+      subnetName:
+        type: "string"
+
+  ReleaseSpec:
+    type: "object"
+    properties:
+      image:
+        type: "string"
+      version:
+        type: "string"
+
+  NetworkingSpec:
+    type: "object"
+    properties:
+      clusterNetwork:
+        type: "array"
+        items:
+          $ref: "#/definitions/ClusterNetworkEntry"
+      serviceNetwork:
+        type: "array"
+        items:
+          type: "string"
+
+  ClusterNetworkEntry:
+    type: "object"
+    properties:
+      cidr:
+        type: "string"
+      hostPrefix:
+        type: "integer"
+
+  DNSSpec:
+    type: "object"
+    properties:
+      baseDomain:
+        type: "string"
+
+  ClusterStatus:
+    type: "object"
+    required:
+      - "observedGeneration"
+      - "conditions"
+      - "phase"
+      - "lastUpdateTime"
+    properties:
+      observedGeneration:
+        type: "integer"
+        format: "int64"
+      conditions:
+        type: "array"
+        items:
+          $ref: "#/definitions/Condition"
+      phase:
+        type: "string"
+        enum: ["Pending", "Progressing", "Ready", "Failed"]
+      message:
+        type: "string"
+      reason:
+        type: "string"
+      lastUpdateTime:
+        type: "string"
+        format: "date-time"
+
+  Condition:
+    type: "object"
+    required:
+      - "type"
+      - "status"
+      - "lastTransitionTime"
+    properties:
+      type:
+        type: "string"
+      status:
+        type: "string"
+        enum: ["True", "False", "Unknown"]
+      lastTransitionTime:
+        type: "string"
+        format: "date-time"
+      reason:
+        type: "string"
+      message:
+        type: "string"
+
+  CreateClusterRequest:
+    type: "object"
+    required:
+      - "name"
+      - "spec"
+    properties:
+      name:
+        type: "string"
+        minLength: 1
+        maxLength: 63
+        pattern: "^[a-z0-9-]+$"
+      spec:
+        $ref: "#/definitions/ClusterSpec"
+      target_project_id:
+        type: "string"
+
+  UpdateClusterRequest:
+    type: "object"
+    required:
+      - "spec"
+    properties:
+      spec:
+        $ref: "#/definitions/ClusterSpec"
+
+  ClusterListResponse:
+    type: "object"
+    required:
+      - "clusters"
+      - "total"
+      - "limit"
+      - "offset"
+    properties:
+      clusters:
+        type: "array"
+        items:
+          $ref: "#/definitions/Cluster"
+      total:
+        type: "integer"
+      limit:
+        type: "integer"
+      offset:
+        type: "integer"
+
+  ClusterStatusResponse:
+    type: "object"
+    required:
+      - "cluster_id"
+      - "status"
+      - "controllers"
+    properties:
+      cluster_id:
+        type: "string"
+        format: "uuid"
+      status:
+        $ref: "#/definitions/ClusterStatus"
+      controllers:
+        type: "array"
+        items:
+          $ref: "#/definitions/ControllerStatus"
+
+  ControllerStatus:
+    type: "object"
+    required:
+      - "controller_name"
+      - "observed_generation"
+      - "conditions"
+      - "updated_at"
+    properties:
+      controller_name:
+        type: "string"
+      observed_generation:
+        type: "integer"
+        format: "int64"
+      conditions:
+        type: "array"
+        items:
+          $ref: "#/definitions/Condition"
+      metadata:
+        type: "object"
+        additionalProperties: true
+      last_error:
+        $ref: "#/definitions/ControllerError"
+      updated_at:
+        type: "string"
+        format: "date-time"
+
+  ControllerError:
+    type: "object"
+    properties:
+      message:
+        type: "string"
+      code:
+        type: "string"
+      details:
+        type: "object"
+        additionalProperties: true
+
+  UpdateClusterStatusRequest:
+    type: "object"
+    required:
+      - "controller_name"
+      - "observed_generation"
+      - "conditions"
+    properties:
+      controller_name:
+        type: "string"
+      observed_generation:
+        type: "integer"
+        format: "int64"
+      conditions:
+        type: "array"
+        items:
+          $ref: "#/definitions/Condition"
+      metadata:
+        type: "object"
+        additionalProperties: true
+      last_error:
+        $ref: "#/definitions/ControllerError"
+
+  UpdateStatusResponse:
+    type: "object"
+    required:
+      - "message"
+      - "cluster_id"
+      - "controller_name"
+      - "observed_generation"
+    properties:
+      message:
+        type: "string"
+      cluster_id:
+        type: "string"
+        format: "uuid"
+      controller_name:
+        type: "string"
+      observed_generation:
+        type: "integer"
+        format: "int64"
+
+  # NodePool definitions
+  NodePool:
+    type: "object"
+    required:
+      - "id"
+      - "name"
+      - "cluster_id"
+      - "generation"
+      - "resource_version"
+      - "spec"
+      - "created_at"
+      - "updated_at"
+      - "created_by"
+    properties:
+      id:
+        type: "string"
+        format: "uuid"
+      name:
+        type: "string"
+        minLength: 1
+        maxLength: 63
+        pattern: "^[a-z0-9-]+$"
+      cluster_id:
+        type: "string"
+        format: "uuid"
+      generation:
+        type: "integer"
+        format: "int64"
+        minimum: 1
+      resource_version:
+        type: "string"
+      spec:
+        $ref: "#/definitions/NodePoolSpec"
+      created_at:
+        type: "string"
+        format: "date-time"
+      updated_at:
+        type: "string"
+        format: "date-time"
+      created_by:
+        type: "string"
+        format: "email"
+
+  NodePoolSpec:
+    type: "object"
+    required:
+      - "platform"
+    properties:
+      platform:
+        $ref: "#/definitions/NodePoolPlatformSpec"
+      nodeCount:
+        type: "integer"
+        minimum: 0
+      autoscaling:
+        $ref: "#/definitions/AutoscalingSpec"
+
+  NodePoolPlatformSpec:
+    type: "object"
+    required:
+      - "type"
+    properties:
+      type:
+        type: "string"
+        enum: ["gcp", "aws", "azure"]
+      gcp:
+        $ref: "#/definitions/GCPNodePoolSpec"
+      aws:
+        $ref: "#/definitions/AWSNodePoolSpec"
+      azure:
+        $ref: "#/definitions/AzureNodePoolSpec"
+
+  GCPNodePoolSpec:
+    type: "object"
+    properties:
+      machineType:
+        type: "string"
+      diskSize:
+        type: "integer"
+        minimum: 10
+      diskType:
+        type: "string"
+        enum: ["pd-standard", "pd-ssd", "pd-balanced"]
+      zones:
+        type: "array"
+        items:
+          type: "string"
+      preemptible:
+        type: "boolean"
+        default: false
+      accelerators:
+        type: "array"
+        items:
+          $ref: "#/definitions/AcceleratorSpec"
+      labels:
+        type: "object"
+        additionalProperties:
+          type: "string"
+      taints:
+        type: "array"
+        items:
+          $ref: "#/definitions/TaintSpec"
+
+  AWSNodePoolSpec:
+    type: "object"
+    properties:
+      instanceType:
+        type: "string"
+      volumeSize:
+        type: "integer"
+        minimum: 8
+      volumeType:
+        type: "string"
+        enum: ["gp2", "gp3", "io1", "io2"]
+      availabilityZones:
+        type: "array"
+        items:
+          type: "string"
+      spotInstances:
+        type: "boolean"
+        default: false
+      userData:
+        type: "string"
+
+  AzureNodePoolSpec:
+    type: "object"
+    properties:
+      vmSize:
+        type: "string"
+      osDiskSizeGB:
+        type: "integer"
+        minimum: 30
+      osDiskType:
+        type: "string"
+        enum: ["Standard_LRS", "Premium_LRS", "StandardSSD_LRS"]
+      availabilityZones:
+        type: "array"
+        items:
+          type: "string"
+      spotInstances:
+        type: "boolean"
+        default: false
+
+  AutoscalingSpec:
+    type: "object"
+    properties:
+      enabled:
+        type: "boolean"
+        default: false
+      minNodes:
+        type: "integer"
+        minimum: 0
+      maxNodes:
+        type: "integer"
+        minimum: 1
+      targetCPUUtilization:
+        type: "integer"
+        minimum: 1
+        maximum: 100
+      targetMemoryUtilization:
+        type: "integer"
+        minimum: 1
+        maximum: 100
+      scaleDownDelay:
+        type: "string"
+      scaleUpDelay:
+        type: "string"
+
+  AcceleratorSpec:
+    type: "object"
+    required:
+      - "type"
+      - "count"
+    properties:
+      type:
+        type: "string"
+      count:
+        type: "integer"
+        minimum: 1
+
+  TaintSpec:
+    type: "object"
+    required:
+      - "key"
+      - "effect"
+    properties:
+      key:
+        type: "string"
+      value:
+        type: "string"
+      effect:
+        type: "string"
+        enum: ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+
+  CreateNodePoolRequest:
+    type: "object"
+    required:
+      - "name"
+      - "cluster_id"
+      - "spec"
+    properties:
+      name:
+        type: "string"
+        minLength: 1
+        maxLength: 63
+        pattern: "^[a-z0-9-]+$"
+      cluster_id:
+        type: "string"
+        format: "uuid"
+      spec:
+        $ref: "#/definitions/NodePoolSpec"
+
+  UpdateNodePoolRequest:
+    type: "object"
+    required:
+      - "name"
+      - "spec"
+    properties:
+      name:
+        type: "string"
+        minLength: 1
+        maxLength: 63
+        pattern: "^[a-z0-9-]+$"
+      spec:
+        $ref: "#/definitions/NodePoolSpec"
+
+  NodePoolListResponse:
+    type: "object"
+    required:
+      - "nodepools"
+      - "total"
+      - "limit"
+      - "offset"
+    properties:
+      nodepools:
+        type: "array"
+        items:
+          $ref: "#/definitions/NodePool"
+      total:
+        type: "integer"
+      limit:
+        type: "integer"
+      offset:
+        type: "integer"
+
+  NodePoolStatusResponse:
+    type: "object"
+    required:
+      - "nodepool_id"
+      - "controller_status"
+    properties:
+      nodepool_id:
+        type: "string"
+        format: "uuid"
+      controller_status:
+        type: "array"
+        items:
+          $ref: "#/definitions/NodePoolControllerStatus"
+
+  NodePoolControllerStatus:
+    type: "object"
+    required:
+      - "controller_name"
+      - "observed_generation"
+      - "conditions"
+      - "updated_at"
+    properties:
+      controller_name:
+        type: "string"
+      observed_generation:
+        type: "integer"
+        format: "int64"
+      conditions:
+        type: "array"
+        items:
+          $ref: "#/definitions/Condition"
+      metadata:
+        type: "object"
+        additionalProperties: true
+      updated_at:
+        type: "string"
+        format: "date-time"
+
+  UpdateNodePoolStatusRequest:
+    type: "object"
+    required:
+      - "controller_name"
+      - "observed_generation"
+      - "conditions"
+      - "metadata"
+    properties:
+      controller_name:
+        type: "string"
+      observed_generation:
+        type: "integer"
+        format: "int64"
+      conditions:
+        type: "array"
+        items:
+          $ref: "#/definitions/Condition"
+      metadata:
+        type: "object"
+        additionalProperties: true

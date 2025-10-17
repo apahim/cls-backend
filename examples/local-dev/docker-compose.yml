@@ -1,0 +1,195 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:13
+    container_name: cls-postgres
+    environment:
+      POSTGRES_USER: cls_user
+      POSTGRES_PASSWORD: cls_password
+      POSTGRES_DB: cls_backend
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cls_user -d cls_backend"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Google Cloud Pub/Sub Emulator
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    container_name: cls-pubsub-emulator
+    command: >
+      bash -c "
+        gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=test-project
+      "
+    ports:
+      - "8085:8085"
+    environment:
+      - CLOUDSDK_CORE_PROJECT=test-project
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8085 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Pub/Sub Setup (create topics and subscriptions)
+  pubsub-setup:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    container_name: cls-pubsub-setup
+    depends_on:
+      pubsub-emulator:
+        condition: service_healthy
+    environment:
+      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
+      - CLOUDSDK_CORE_PROJECT=test-project
+    command: >
+      bash -c "
+        echo 'Setting up Pub/Sub topics and subscriptions...'
+        gcloud pubsub topics create cluster-events --project=test-project
+        echo 'Pub/Sub setup completed!'
+      "
+
+  # CLS Backend API (development build)
+  cls-backend:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+        GIT_COMMIT: local
+        BUILD_TIME: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    container_name: cls-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pubsub-setup:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"  # API port
+      - "8081:8081"  # Metrics port
+    environment:
+      # Database
+      DATABASE_URL: postgres://cls_user:cls_password@postgres:5432/cls_backend?sslmode=disable
+      DATABASE_MAX_OPEN_CONNS: 10
+      DATABASE_MAX_IDLE_CONNS: 2
+
+      # Google Cloud
+      GOOGLE_CLOUD_PROJECT: test-project
+
+      # Pub/Sub Emulator
+      PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      PUBSUB_CLUSTER_EVENTS_TOPIC: cluster-events
+
+      # Server
+      PORT: 8080
+      ENVIRONMENT: development
+
+      # Authentication (disabled for local development)
+      DISABLE_AUTH: true
+
+      # Logging
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+      LOG_REQUESTS: true
+
+      # Reconciliation
+      RECONCILIATION_ENABLED: true
+      RECONCILIATION_CHECK_INTERVAL: 30s
+      RECONCILIATION_MAX_CONCURRENT: 10
+
+      # Metrics
+      METRICS_ENABLED: true
+      METRICS_PORT: 8081
+    volumes:
+      - ../../internal/database/migrations:/app/internal/database/migrations
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Database migration runner
+  cls-migration:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    container_name: cls-migration
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://cls_user:cls_password@postgres:5432/cls_backend?sslmode=disable
+    command: >
+      bash -c "
+        echo 'Running database migrations...'
+        psql $$DATABASE_URL -f /app/internal/database/migrations/001_complete_schema.sql
+        echo 'Database migrations completed!'
+      "
+    volumes:
+      - ../../internal/database/migrations:/app/internal/database/migrations
+
+  # Optional: PostgreSQL Admin Interface
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: cls-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - admin
+
+  # Optional: Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cls-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - cls-backend
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cls-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+  grafana_data:
+
+networks:
+  default:
+    name: cls-network

@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cls-backend-migration
+  namespace: cls-system
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: copy-migrations
+        image: gcr.io/apahim-dev-1/cls-backend:build-fix-20251017-114056
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          echo "Copying migration files..."
+          cp -r /app/internal/database/migrations/* /shared/migrations/
+          ls -la /shared/migrations/
+        volumeMounts:
+        - name: migrations
+          mountPath: /shared/migrations
+      containers:
+      - name: migration
+        image: postgres:15-alpine
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          echo "Starting database migrations..."
+          echo "Database URL: $DATABASE_URL"
+          cd /shared/migrations
+          for file in *.sql; do
+            echo "Running migration: $file"
+            psql "$DATABASE_URL" -f "$file" || echo "Migration $file failed or already applied"
+          done
+          echo "Database migrations completed"
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: DATABASE_URL
+        volumeMounts:
+        - name: migrations
+          mountPath: /shared/migrations
+      volumes:
+      - name: migrations
+        emptyDir: {}

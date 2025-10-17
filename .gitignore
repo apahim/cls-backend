@@ -1,0 +1,141 @@
+# Binaries
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test files
+*.test
+*.out
+*.cover
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+.env.test
+
+# Credentials and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+key.json
+service-account*.json
+credentials.json
+*-key.json
+*-credentials.json
+
+# Configuration files with secrets
+config.yaml
+config.yml
+secrets.yaml
+secrets.yml
+
+# Docker
+.dockerignore
+
+# Kubernetes secrets (local)
+*-secret.yaml
+*-secrets.yaml
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Node modules (if any frontend)
+node_modules/
+
+# Python (if any scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local development overrides
+docker-compose.override.yml
+.local/
+
+# Coverage reports
+coverage.txt
+coverage.html
+coverage.xml
+
+# Vendor directory
+vendor/
+
+# Air live reload (if used)
+.air.toml
+tmp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Memory dumps
+*.hprof
+*.heap
+
+# JetBrains
+*.iml
+.idea/
+
+# Package managers
+yarn.lock
+package-lock.json
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk

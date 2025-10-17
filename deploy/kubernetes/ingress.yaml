@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cls-backend-ingress
+  namespace: cls-system
+  labels:
+    app.kubernetes.io/component: api-server
+    app.kubernetes.io/name: cls-backend
+  annotations:
+    # Use Google Cloud Load Balancer
+    kubernetes.io/ingress.class: "gce"
+    # Enable HTTPS redirect
+    kubernetes.io/ingress.allow-http: "true"
+    # Use NEG for better integration with GKE
+    cloud.google.com/neg: '{"ingress": true}'
+    # Configure SSL redirect
+    ingress.gcp.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: cls-backend
+            port:
+              number: 80
+---
+# Optional: BackendConfig for health checks and other settings
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: cls-backend-backendconfig
+  namespace: cls-system
+spec:
+  healthCheck:
+    checkIntervalSec: 30
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /health
+    port: 80
+  timeoutSec: 60
+  connectionDraining:
+    drainingTimeoutSec: 300

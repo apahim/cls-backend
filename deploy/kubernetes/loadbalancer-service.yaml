@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cls-backend-lb
+  namespace: cls-system
+  labels:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: loadbalancer
+  annotations:
+    # Allow traffic from Google Cloud API Gateway ranges
+    cloud.google.com/load-balancer-type: "External"
+    service.beta.kubernetes.io/load-balancer-source-ranges: "130.211.0.0/22,35.191.0.0/16"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: api-server

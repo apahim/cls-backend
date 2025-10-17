@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cls-backend-config
+  namespace: cls-system
+  labels:
+    app.kubernetes.io/name: cls-backend
+    app.kubernetes.io/component: configmap
+data:
+  # Server configuration
+  PORT: "8080"
+  ENVIRONMENT: "production"
+  SERVER_READ_TIMEOUT: "30s"
+  SERVER_WRITE_TIMEOUT: "30s"
+  SERVER_IDLE_TIMEOUT: "120s"
+  SERVER_SHUTDOWN_TIMEOUT: "30s"           # Fixed naming consistency
+
+  # Database configuration
+  DATABASE_MAX_OPEN_CONNS: "25"
+  DATABASE_MAX_IDLE_CONNS: "5"
+  DATABASE_CONN_MAX_LIFETIME: "5m"
+  DATABASE_CONN_MAX_IDLE_TIME: "1m"
+
+  # Pub/Sub configuration (fan-out architecture)
+  PUBSUB_CLUSTER_EVENTS_TOPIC: "cluster-events"
+  PUBSUB_MAX_CONCURRENT_HANDLERS: "10"
+  PUBSUB_MAX_OUTSTANDING_MESSAGES: "100"
+
+  # Reconciliation Scheduler Configuration - HEALTH-AWARE
+  RECONCILIATION_ENABLED: "true"
+  RECONCILIATION_CHECK_INTERVAL: "1m"              # Check every minute
+  RECONCILIATION_MAX_CONCURRENT: "50"             # Max concurrent events
+
+  # Health-Aware Interval Configuration - CONFIGURABLE
+  RECONCILIATION_ADAPTIVE_ENABLED: "true"         # Enable health-based intervals
+  RECONCILIATION_HEALTHY_INTERVAL: "5m"           # 5min for healthy clusters
+  RECONCILIATION_UNHEALTHY_INTERVAL: "5s"         # 5sec for unhealthy clusters
+  RECONCILIATION_DEFAULT_INTERVAL: "5m"           # Fallback interval
+
+  # Reactive Reconciliation Configuration
+  REACTIVE_RECONCILIATION_ENABLED: "false"        # Disabled by default
+  REACTIVE_RECONCILIATION_DEBOUNCE: "2s"          # Debounce rapid changes
+  REACTIVE_RECONCILIATION_MAX_EVENTS_PER_MINUTE: "60"
+
+  # Logging configuration
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+
+  # Aggregation configuration
+  AGGREGATION_ENABLED: "true"
+  AGGREGATION_INTERVAL: "30s"
+  AGGREGATION_BATCH_SIZE: "50"
+  AGGREGATION_MAX_CONCURRENCY: "10"
+  AGGREGATION_RETRY_ATTEMPTS: "3"
+  AGGREGATION_RETRY_BACKOFF: "5s"
+  AGGREGATION_HEALTH_CHECK_INTERVAL: "60s"
+
+  # Metrics configuration
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "8081"
+
+  # Authentication configuration (enable for user isolation testing)
+  DISABLE_AUTH: "false"
