@@ -40,7 +40,7 @@ func NewServer(
 	clusterService := services.NewClusterService(repository, pubsubService)
 
 	// Initialize handlers
-	clusterHandler := NewClusterHandler(clusterService)
+	clusterHandler := NewClusterHandler(clusterService, repository.Status)
 	nodepoolHandler := NewNodePoolHandler(repository, pubsubService)
 
 	// Setup router

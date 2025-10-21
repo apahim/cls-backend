@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/apahim/cls-backend/internal/auth"
+	"github.com/apahim/cls-backend/internal/database"
+	"github.com/apahim/cls-backend/internal/middleware"
 	"github.com/apahim/cls-backend/internal/models"
 	"github.com/apahim/cls-backend/internal/services"
 	"github.com/apahim/cls-backend/internal/utils"
@@ -17,15 +20,17 @@ import (
 
 // ClusterHandler handles cluster operations
 type ClusterHandler struct {
-	clusterService *services.ClusterService
-	logger         *zap.Logger
+	clusterService   *services.ClusterService
+	statusRepository *database.StatusRepository
+	logger           *zap.Logger
 }
 
 // NewClusterHandler creates a new cluster handler
-func NewClusterHandler(clusterService *services.ClusterService) *ClusterHandler {
+func NewClusterHandler(clusterService *services.ClusterService, statusRepository *database.StatusRepository) *ClusterHandler {
 	return &ClusterHandler{
-		clusterService: clusterService,
-		logger:         zap.L().Named("cluster_handler"),
+		clusterService:   clusterService,
+		statusRepository: statusRepository,
+		logger:           zap.L().Named("cluster_handler"),
 	}
 }
 
@@ -66,23 +71,34 @@ func (h *ClusterHandler) ListClusters(c *gin.Context) {
 	// Check for created_by filter (for future authorization)
 	createdBy := c.Query("created_by")
 
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
 	h.logger.Info("Listing clusters",
-		zap.String("user_email", c.GetString("user_email")),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 		zap.Int("limit", limit),
 		zap.Int("offset", offset),
 		zap.String("created_by_filter", createdBy),
 	)
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-		return
-	}
+	// Use access-level aware listing
+	var clusters []*models.Cluster
+	var total int64
+	var err error
 
-	// Always use client isolation - list only user's clusters
-	clusters, total, err := h.clusterService.ListClusters(ctx, userEmail, limit, offset)
+	if userCtx.IsController {
+		// Controllers get system-wide access
+		clusters, total, err = h.clusterService.ListAllClusters(ctx, limit, offset)
+	} else {
+		// Users get scoped access
+		clusters, total, err = h.clusterService.ListClusters(ctx, userCtx.Email, limit, offset)
+	}
 
 	if err != nil {
 		h.logger.Error("Failed to list clusters", zap.Error(err))
@@ -116,23 +132,36 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 		return
 	}
 
-	// Get user email from context (for future authorization)
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		userEmail = "unknown@example.com" // fallback
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	// Check if user can create clusters
+	if !auth.CanCreateCluster(userCtx) {
+		h.logger.Warn("User not authorized to create clusters",
+			zap.String("user_email", userCtx.Email),
+			zap.Bool("is_controller", userCtx.IsController),
+		)
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to create clusters"})
+		return
 	}
 
 	h.logger.Info("Creating cluster",
 		zap.String("cluster_name", req.Name),
-		zap.String("user_email", userEmail),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 	)
 
 	// Create cluster
-	cluster, err := h.clusterService.CreateCluster(ctx, &req, userEmail)
+	cluster, err := h.clusterService.CreateCluster(ctx, &req, userCtx.Email)
 	if err != nil {
 		h.logger.Error("Failed to create cluster",
 			zap.String("cluster_name", req.Name),
-			zap.String("user_email", userEmail),
+			zap.String("user_email", userCtx.Email),
 			zap.Error(err),
 		)
 
@@ -167,21 +196,22 @@ func (h *ClusterHandler) GetCluster(c *gin.Context) {
 		return
 	}
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
 	h.logger.Info("Getting cluster",
 		zap.String("cluster_id", clusterIDStr),
-		zap.String("user_email", userEmail),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 	)
 
-	// Get cluster with client isolation
-	cluster, err := h.clusterService.GetCluster(ctx, clusterID, userEmail)
+	// Get cluster with access control
+	cluster, err := h.clusterService.GetClusterWithAccessControl(ctx, clusterID, userCtx)
 	if err != nil {
 		h.logger.Error("Failed to get cluster",
 			zap.String("cluster_id", clusterIDStr),
@@ -224,21 +254,22 @@ func (h *ClusterHandler) UpdateCluster(c *gin.Context) {
 		return
 	}
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
 	h.logger.Info("Updating cluster",
 		zap.String("cluster_id", clusterIDStr),
-		zap.String("user_email", userEmail),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 	)
 
-	// Update cluster with client isolation
-	cluster, err := h.clusterService.UpdateCluster(ctx, clusterID, &req, userEmail)
+	// Update cluster with access control
+	cluster, err := h.clusterService.UpdateClusterWithAccessControl(ctx, clusterID, &req, userCtx)
 	if err != nil {
 		h.logger.Error("Failed to update cluster",
 			zap.String("cluster_id", clusterIDStr),
@@ -276,22 +307,23 @@ func (h *ClusterHandler) DeleteCluster(c *gin.Context) {
 
 	force := c.Query("force") == "true"
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
 	h.logger.Info("Deleting cluster",
 		zap.String("cluster_id", clusterIDStr),
-		zap.String("user_email", userEmail),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 		zap.Bool("force", force),
 	)
 
-	// Delete cluster with client isolation
-	err = h.clusterService.DeleteCluster(ctx, clusterID, force, userEmail)
+	// Delete cluster with access control
+	err = h.clusterService.DeleteClusterWithAccessControl(ctx, clusterID, force, userCtx)
 	if err != nil {
 		h.logger.Error("Failed to delete cluster",
 			zap.String("cluster_id", clusterIDStr),
@@ -338,10 +370,10 @@ func (h *ClusterHandler) GetClusterStatus(c *gin.Context) {
 		return
 	}
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
 			utils.ErrCodeUnauthorized,
 			"Authentication required",
@@ -352,11 +384,12 @@ func (h *ClusterHandler) GetClusterStatus(c *gin.Context) {
 
 	h.logger.Info("Getting cluster status",
 		zap.String("cluster_id", clusterIDStr),
-		zap.String("user_email", userEmail),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 	)
 
-	// Get cluster first to verify it exists and user owns it
-	cluster, err := h.clusterService.GetCluster(ctx, clusterID, userEmail)
+	// Get cluster first to verify it exists and user has access
+	cluster, err := h.clusterService.GetClusterWithAccessControl(ctx, clusterID, userCtx)
 	if err != nil {
 		h.logger.Error("Failed to get cluster for status",
 			zap.String("cluster_id", clusterIDStr),
@@ -379,9 +412,30 @@ func (h *ClusterHandler) GetClusterStatus(c *gin.Context) {
 		return
 	}
 
+	// Get individual controller status reports
+	controllerStatuses, err := h.statusRepository.ListClusterControllerStatus(ctx, clusterID)
+	if err != nil {
+		h.logger.Error("Failed to get controller status reports",
+			zap.String("cluster_id", clusterIDStr),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+			utils.ErrCodeInternal,
+			"Failed to get controller status reports",
+			err.Error(),
+		))
+		return
+	}
+
+	h.logger.Info("Retrieved controller status reports",
+		zap.String("cluster_id", clusterIDStr),
+		zap.Int("controller_count", len(controllerStatuses)),
+	)
+
 	response := gin.H{
-		"cluster_id": clusterIDStr,
-		"status":     cluster.Status, // K8s-like status structure
+		"cluster_id":         clusterIDStr,
+		"status":            cluster.Status,      // K8s-like aggregated status
+		"controller_status": controllerStatuses, // Individual controller reports
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -424,10 +478,10 @@ func (h *ClusterHandler) UpdateClusterStatus(c *gin.Context) {
 		return
 	}
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
 			utils.ErrCodeUnauthorized,
 			"Authentication required",
@@ -436,14 +490,29 @@ func (h *ClusterHandler) UpdateClusterStatus(c *gin.Context) {
 		return
 	}
 
+	// Only controllers can report status
+	if !auth.CanReportStatus(userCtx) {
+		h.logger.Warn("User not authorized to report status",
+			zap.String("user_email", userCtx.Email),
+			zap.Bool("is_controller", userCtx.IsController),
+		)
+		c.JSON(http.StatusForbidden, utils.NewAPIError(
+			utils.ErrCodeForbidden,
+			"Only system controllers can report status",
+			"",
+		))
+		return
+	}
+
 	h.logger.Info("Updating cluster status",
 		zap.String("cluster_id", clusterIDStr),
 		zap.String("controller_name", statusUpdate.ControllerName),
-		zap.String("user_email", userEmail),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
 	)
 
-	// Verify cluster exists and user owns it
-	_, err = h.clusterService.GetCluster(ctx, clusterID, userEmail)
+	// Controllers can access any cluster for status reporting
+	_, err = h.clusterService.GetClusterWithAccessControl(ctx, clusterID, userCtx)
 	if err != nil {
 		h.logger.Error("Failed to verify cluster for status update",
 			zap.String("cluster_id", clusterIDStr),
@@ -470,15 +539,35 @@ func (h *ClusterHandler) UpdateClusterStatus(c *gin.Context) {
 	statusUpdate.ClusterID = clusterID
 	statusUpdate.LastUpdated = time.Now()
 
-	// This would be implemented once we have the status repository
-	// For now, just acknowledge the status update
-	h.logger.Info("Successfully acknowledged cluster status update",
+	// Ensure metadata is not nil to satisfy database NOT NULL constraint
+	if statusUpdate.Metadata == nil {
+		statusUpdate.Metadata = make(models.JSONB)
+	}
+
+	// Store the status update in the database
+	err = h.statusRepository.UpsertClusterControllerStatus(ctx, &statusUpdate)
+	if err != nil {
+		h.logger.Error("Failed to store cluster status update",
+			zap.String("cluster_id", clusterIDStr),
+			zap.String("controller_name", statusUpdate.ControllerName),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+			utils.ErrCodeInternal,
+			"Failed to store status update",
+			err.Error(),
+		))
+		return
+	}
+
+	h.logger.Info("Successfully stored cluster status update",
 		zap.String("cluster_id", clusterIDStr),
 		zap.String("controller_name", statusUpdate.ControllerName),
+		zap.Int64("observed_generation", statusUpdate.ObservedGeneration),
 	)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":         "Status update acknowledged",
+		"message":         "Status update stored successfully",
 		"cluster_id":      clusterIDStr,
 		"controller_name": statusUpdate.ControllerName,
 	})

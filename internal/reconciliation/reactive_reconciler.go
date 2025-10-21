@@ -9,6 +9,7 @@ import (
 	"github.com/apahim/cls-backend/internal/database"
 	"github.com/apahim/cls-backend/internal/pubsub"
 	"github.com/apahim/cls-backend/internal/utils"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 )
 
@@ -197,7 +198,7 @@ func (r *ReactiveReconciler) updateConfigFromDatabase(ctx context.Context) error
 		LIMIT 1`
 
 	var enabled bool
-	var changeTypes []string
+	var changeTypes pq.StringArray
 	var debounceInterval string
 	var maxEventsPerMinute int
 

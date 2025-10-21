@@ -184,7 +184,8 @@ type JSONB map[string]interface{}
 // Value implements the driver.Valuer interface for JSONB
 func (j JSONB) Value() (driver.Value, error) {
 	if j == nil {
-		return nil, nil
+		// Return empty JSON object instead of nil to satisfy NOT NULL constraints
+		return []byte("{}"), nil
 	}
 	return json.Marshal(j)
 }

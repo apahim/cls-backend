@@ -81,16 +81,23 @@ func (a *StatusAggregator) getControllerStats(ctx context.Context, clusterID uui
 		SELECT
 			COUNT(*) AS total,
 			COUNT(CASE WHEN
-				EXISTS (
-					SELECT 1 FROM jsonb_array_elements(conditions) AS condition
+				(
+					SELECT COUNT(*)
+					FROM jsonb_array_elements(conditions) AS condition
 					WHERE condition->>'type' = 'Available' AND condition->>'status' = 'True'
-				)
+				) > 0
 			THEN 1 END) AS ready,
 			COUNT(CASE WHEN last_error IS NOT NULL THEN 1 END) AS errors
 		FROM controller_status
 		WHERE cluster_id = $1 AND observed_generation = $2`
 
 	var stats ControllerStats
+	a.logger.Debug("Executing controller stats query",
+		zap.String("cluster_id", clusterID.String()),
+		zap.Int64("generation", generation),
+		zap.String("query", query),
+	)
+
 	err := a.client.QueryRowContext(ctx, query, clusterID, generation).Scan(
 		&stats.TotalCount,
 		&stats.ReadyCount,
