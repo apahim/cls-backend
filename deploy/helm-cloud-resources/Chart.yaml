@@ -1,0 +1,18 @@
+apiVersion: v2
+name: cls-backend-cloud-resources
+description: Google Cloud resources for CLS Backend using Config Connector
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/apahim/cls-backend
+maintainers:
+  - name: CLS Backend Team
+keywords:
+  - cls
+  - cluster-lifecycle
+  - gcp
+  - config-connector
+dependencies: []
+annotations:
+  category: Infrastructure
+  gcp.configconnector.required: "true"

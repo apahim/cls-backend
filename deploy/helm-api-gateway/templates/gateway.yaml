@@ -1,0 +1,14 @@
+---
+# API Gateway Gateway
+apiVersion: apigateway.cnrm.cloud.google.com/v1beta1
+kind: APIGatewayGateway
+metadata:
+  name: {{ .Values.apiGateway.gateway.name }}
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-api-gateway.labels" . | nindent 4 }}
+spec:
+  displayName: {{ .Values.apiGateway.gateway.displayName }}
+  location: {{ .Values.gcp.region }}
+  apiConfigRef:
+    name: {{ include "cls-backend-api-gateway.apiConfigId" . }}

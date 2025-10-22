@@ -1,0 +1,56 @@
+# Google Cloud Platform Configuration
+gcp:
+  # REQUIRED: GCP Project ID where resources will be created
+  project: ""
+  # Region for regional resources (Cloud SQL)
+  region: "us-central1"
+
+# Cloud SQL PostgreSQL Configuration
+database:
+  # Instance configuration
+  instance:
+    name: "cls-backend-db"
+    tier: "db-custom-1-3840"  # 1 vCPU, 3.75GB RAM
+    diskSize: "20"            # GB
+    diskType: "PD_SSD"
+    version: "POSTGRES_15"
+
+  # Database and user configuration (fixed names for consistency)
+  database:
+    name: "cls_backend"       # Fixed database name
+  user:
+    name: "cls_user"          # Fixed username
+    # Password management via Secret Manager
+    passwordSecret:
+      name: "cls-backend-db-password"
+      generatePassword: true  # Generate random password if true
+      password: ""            # Set custom password if generatePassword is false
+
+# Pub/Sub Configuration
+pubsub:
+  # Topic name (must match application configuration)
+  clusterEventsTopic: "cluster-events"
+
+# IAM Service Account Configuration
+serviceAccount:
+  name: "cls-backend"
+  displayName: "CLS Backend Service Account"
+  description: "Service account for CLS Backend application"
+
+# Workload Identity Configuration (for automatic K8s SA to GCP SA binding)
+workloadIdentity:
+  # Enable Workload Identity IAM binding
+  enabled: true
+  # Kubernetes cluster project (defaults to gcp.project if not specified)
+  clusterProject: ""
+  # Kubernetes namespace where the service account will be created
+  kubernetesNamespace: "cls-system"
+  # Kubernetes service account name (should match application chart)
+  kubernetesServiceAccount: "cls-backend"
+
+# Labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: cls-backend
+  app.kubernetes.io/component: cloud-resources
+  app.kubernetes.io/part-of: cls-backend
+  app.kubernetes.io/managed-by: helm

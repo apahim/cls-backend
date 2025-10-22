@@ -1,0 +1,19 @@
+{{- include "cls-backend-api-gateway.validateCrossChartParams" . }}
+---
+# API Gateway API
+apiVersion: apigateway.cnrm.cloud.google.com/v1beta1
+kind: APIGatewayAPI
+metadata:
+  name: {{ .Values.apiGateway.api.name }}
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-api-gateway.labels" . | nindent 4 }}
+spec:
+  displayName: {{ .Values.apiGateway.api.displayName }}
+  description: {{ .Values.apiGateway.api.description }}
+{{- else }}
+{{- fail "backend.externalIP is required - please provide a pre-provisioned static IP address" }}
+{{- end }}
+{{- else }}
+{{- fail "gcp.project is required" }}
+{{- end }}

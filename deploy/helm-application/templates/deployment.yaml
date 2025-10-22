@@ -1,0 +1,221 @@
+{{- include "cls-backend-application.validateCrossChartParams" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cls-backend-application.fullname" . }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "cls-backend-application.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.deployment.replicas }}
+  strategy:
+    type: {{ .Values.deployment.strategy.type }}
+    {{- if eq .Values.deployment.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.deployment.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.deployment.strategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cls-backend-application.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cls-backend-application.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.config.metricsPort | quote }}
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+      # Init container to fetch database password from Secret Manager
+      - name: db-password-fetcher
+        image: google/cloud-sdk:alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Fetch password from Secret Manager (auto-discovered)
+          PASSWORD=$(gcloud secrets versions access latest --secret={{ include "cls-backend-application.getPasswordSecret" . }} --project={{ default .Values.gcp.project .Values.database.passwordSecret.projectId }})
+          # Create DATABASE_URL with fetched password (auto-discovered configuration)
+          DATABASE_URL="postgres://{{ include "cls-backend-application.getDatabaseUsername" . }}:${PASSWORD}@{{ include "cls-backend-application.getDatabaseInstanceName" . }}:5432/{{ include "cls-backend-application.getDatabaseName" . }}?sslmode=require"
+          # Write to shared volume
+          echo -n "$DATABASE_URL" > /shared/DATABASE_URL
+        volumeMounts:
+        - name: shared-config
+          mountPath: /shared
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      # Database readiness check init container
+      - name: db-readiness-check
+        image: postgres:15-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Read DATABASE_URL from shared volume
+          export DATABASE_URL=$(cat /shared/DATABASE_URL)
+
+          echo "Waiting for database to be ready..."
+          until pg_isready -d "$DATABASE_URL"; do
+            echo "Database not ready, waiting..."
+            sleep 5
+          done
+
+          echo "Database is ready!"
+          # Verify we can actually connect and run a simple query
+          psql "$DATABASE_URL" -c "SELECT 1;" > /dev/null
+          echo "Database connection verified!"
+        volumeMounts:
+        - name: shared-config
+          mountPath: /shared
+          readOnly: true
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      containers:
+      - name: cls-backend
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.config.port }}
+          protocol: TCP
+        - name: metrics
+          containerPort: {{ .Values.config.metricsPort }}
+          protocol: TCP
+        env:
+        # Load configuration from ConfigMap
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: PORT
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: ENVIRONMENT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: LOG_LEVEL
+        - name: LOG_FORMAT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: LOG_FORMAT
+        - name: METRICS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: METRICS_ENABLED
+        - name: METRICS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: METRICS_PORT
+        - name: DISABLE_AUTH
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: DISABLE_AUTH
+        - name: PUBSUB_CLUSTER_EVENTS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: PUBSUB_CLUSTER_EVENTS_TOPIC
+        - name: RECONCILIATION_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: RECONCILIATION_ENABLED
+        - name: AGGREGATION_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: AGGREGATION_ENABLED
+
+        # Load secrets - DATABASE_URL will be read from shared volume at runtime
+        - name: GOOGLE_CLOUD_PROJECT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-secrets
+              key: GOOGLE_CLOUD_PROJECT
+
+        {{- if .Values.probes.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+        {{- end }}
+
+        {{- if .Values.probes.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+        {{- end }}
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+
+        # Volume mounts for shared config
+        volumeMounts:
+        - name: shared-config
+          mountPath: /shared
+          readOnly: true
+
+        # Use wrapper command to read DATABASE_URL from shared volume
+        command:
+        - /bin/sh
+        - -c
+        - |
+          export DATABASE_URL=$(cat /shared/DATABASE_URL)
+          exec /app/backend-api
+
+      # Volumes
+      volumes:
+      - name: shared-config
+        emptyDir: {}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
