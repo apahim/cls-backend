@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cls-backend-application.fullname" . }}-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "cls-backend-application.labels" . | nindent 4 }}
+data:
+  # Server configuration
+  PORT: {{ .Values.config.port | quote }}
+  ENVIRONMENT: {{ .Values.config.environment | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.config.logFormat | quote }}
+
+  # Metrics configuration
+  METRICS_ENABLED: {{ .Values.config.metricsEnabled | quote }}
+  METRICS_PORT: {{ .Values.config.metricsPort | quote }}
+
+  # Authentication configuration
+  DISABLE_AUTH: {{ .Values.config.disableAuth | quote }}
+
+  # Pub/Sub configuration (auto-discovered from cloud-resources chart)
+  PUBSUB_CLUSTER_EVENTS_TOPIC: {{ include "cls-backend-application.getPubSubTopic" . | quote }}
+  PUBSUB_MAX_CONCURRENT_HANDLERS: "10"
+  PUBSUB_MAX_OUTSTANDING_MESSAGES: "100"
+
+  # Reconciliation configuration
+  RECONCILIATION_ENABLED: {{ .Values.config.reconciliation.enabled | quote }}
+  RECONCILIATION_CHECK_INTERVAL: {{ .Values.config.reconciliation.checkInterval | quote }}
+  RECONCILIATION_MAX_CONCURRENT: {{ .Values.config.reconciliation.maxConcurrent | quote }}
+  RECONCILIATION_ADAPTIVE_ENABLED: {{ .Values.config.reconciliation.adaptiveEnabled | quote }}
+  RECONCILIATION_HEALTHY_INTERVAL: {{ .Values.config.reconciliation.healthyInterval | quote }}
+  RECONCILIATION_UNHEALTHY_INTERVAL: {{ .Values.config.reconciliation.unhealthyInterval | quote }}
+  RECONCILIATION_DEFAULT_INTERVAL: {{ .Values.config.reconciliation.defaultInterval | quote }}
+
+  # Aggregation configuration
+  AGGREGATION_ENABLED: {{ .Values.config.aggregation.enabled | quote }}
+  AGGREGATION_INTERVAL: {{ .Values.config.aggregation.interval | quote }}
+  AGGREGATION_BATCH_SIZE: {{ .Values.config.aggregation.batchSize | quote }}
+  AGGREGATION_MAX_CONCURRENCY: {{ .Values.config.aggregation.maxConcurrency | quote }}
+  AGGREGATION_RETRY_ATTEMPTS: {{ .Values.config.aggregation.retryAttempts | quote }}
+  AGGREGATION_RETRY_BACKOFF: {{ .Values.config.aggregation.retryBackoff | quote }}
+
+  # Database configuration
+  DATABASE_MAX_OPEN_CONNS: "25"
+  DATABASE_MAX_IDLE_CONNS: "5"
+  DATABASE_CONN_MAX_LIFETIME: "5m"
+  DATABASE_CONN_MAX_IDLE_TIME: "1m"

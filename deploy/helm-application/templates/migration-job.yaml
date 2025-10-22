@@ -1,0 +1,227 @@
+{{- if not .Values.gcp.project }}
+{{- fail "gcp.project is required" }}
+{{- end }}
+---
+# Database Migration Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cls-backend-application.fullname" . }}-migration
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "cls-backend-application.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    # Run before application deployment
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "cls-backend-application.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      restartPolicy: Never
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+      # Init container to fetch database password from Secret Manager
+      - name: db-password-fetcher
+        image: google/cloud-sdk:alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Fetch password from Secret Manager (auto-discovered)
+          PASSWORD=$(gcloud secrets versions access latest --secret={{ include "cls-backend-application.getPasswordSecret" . }} --project={{ default .Values.gcp.project .Values.database.passwordSecret.projectId }})
+          # Create DATABASE_URL with fetched password (auto-discovered configuration)
+          DATABASE_URL="postgres://{{ include "cls-backend-application.getDatabaseUsername" . }}:${PASSWORD}@{{ include "cls-backend-application.getDatabaseInstanceName" . }}:5432/{{ include "cls-backend-application.getDatabaseName" . }}?sslmode=require"
+          # Write to shared volume
+          echo -n "$DATABASE_URL" > /shared/DATABASE_URL
+        volumeMounts:
+        - name: shared-config
+          mountPath: /shared
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      containers:
+      - name: migration
+        image: postgres:15-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Read DATABASE_URL from shared volume
+          export DATABASE_URL=$(cat /shared/DATABASE_URL)
+
+          # Wait for database to be ready
+          echo "Waiting for database to be ready..."
+          until pg_isready -d "$DATABASE_URL"; do
+            echo "Database not ready, waiting..."
+            sleep 5
+          done
+          echo "Database is ready!"
+
+          # Check if migrations have already been applied
+          if psql "$DATABASE_URL" -c "SELECT 1 FROM information_schema.tables WHERE table_name = 'clusters';" 2>/dev/null | grep -q "1 row"; then
+            echo "Database schema already exists, skipping migration"
+            exit 0
+          fi
+
+          echo "Applying database migration..."
+
+          # Apply the consolidated migration
+          psql "$DATABASE_URL" << 'EOF'
+          -- CLS Backend Final Database Schema
+          -- This migration contains the complete schema for clean deployment
+          -- Includes: clusters, nodepools, status tracking, reconciliation, client isolation
+          -- Features: Client isolation via created_by, no organization multi-tenancy
+
+          -- =============================================================================
+          -- CORE TABLES
+          -- =============================================================================
+
+          -- Clusters table - Core cluster lifecycle management with client isolation
+          CREATE TABLE IF NOT EXISTS clusters (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              name VARCHAR(255) NOT NULL,  -- Cluster name (unique per user)
+              target_project_id VARCHAR(255),
+              created_by VARCHAR(255) NOT NULL,   -- Client isolation - user email
+              spec JSONB NOT NULL DEFAULT '{}',
+              status JSONB,  -- Kubernetes-like status block with conditions
+              metadata JSONB NOT NULL DEFAULT '{}',
+              generation BIGINT NOT NULL DEFAULT 1,
+              resource_version VARCHAR(255) NOT NULL DEFAULT gen_random_uuid()::TEXT,
+              status_dirty BOOLEAN DEFAULT TRUE,
+              created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              deleted_at TIMESTAMP WITH TIME ZONE,
+
+              -- Unique constraint: cluster names must be unique per user
+              UNIQUE(name, created_by)
+          );
+
+          -- NodePools table - Cluster nodepool management (inherits security from clusters)
+          CREATE TABLE IF NOT EXISTS nodepools (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+              name VARCHAR(255) NOT NULL,
+              spec JSONB NOT NULL DEFAULT '{}',
+              status JSONB NOT NULL DEFAULT '{}',
+              metadata JSONB NOT NULL DEFAULT '{}',
+              generation BIGINT NOT NULL DEFAULT 1,
+              resource_version VARCHAR(255) NOT NULL DEFAULT gen_random_uuid()::TEXT,
+              created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              deleted_at TIMESTAMP WITH TIME ZONE,
+
+              UNIQUE(cluster_id, name)
+          );
+
+          -- =============================================================================
+          -- INDEXES (Optimized for Client Isolation Performance)
+          -- =============================================================================
+
+          -- Critical index for client isolation - fast cluster filtering by user
+          CREATE INDEX IF NOT EXISTS idx_clusters_created_by ON clusters(created_by) WHERE deleted_at IS NULL;
+
+          -- Performance indexes for common queries
+          CREATE INDEX IF NOT EXISTS idx_clusters_name_created_by ON clusters(name, created_by) WHERE deleted_at IS NULL;
+          CREATE INDEX IF NOT EXISTS idx_clusters_updated_at ON clusters(updated_at) WHERE deleted_at IS NULL;
+          CREATE INDEX IF NOT EXISTS idx_clusters_status_dirty ON clusters(status_dirty) WHERE status_dirty = TRUE;
+
+          -- NodePool indexes (inherit security through cluster_id foreign key)
+          CREATE INDEX IF NOT EXISTS idx_nodepools_cluster_id ON nodepools(cluster_id) WHERE deleted_at IS NULL;
+          CREATE INDEX IF NOT EXISTS idx_nodepools_name_cluster ON nodepools(cluster_id, name) WHERE deleted_at IS NULL;
+
+          -- =============================================================================
+          -- RECONCILIATION SYSTEM (Simplified Binary State)
+          -- =============================================================================
+
+          -- Reconciliation schedule table - per cluster, no controller types
+          CREATE TABLE IF NOT EXISTS reconciliation_schedule (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+              last_reconciled TIMESTAMP WITH TIME ZONE,
+              next_reconciliation TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              reconciliation_interval INTERVAL NOT NULL DEFAULT INTERVAL '5 minutes',
+              created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+              UNIQUE(cluster_id)
+          );
+
+          -- Index for efficient reconciliation queries
+          CREATE INDEX IF NOT EXISTS idx_reconciliation_next ON reconciliation_schedule(next_reconciliation);
+
+          -- =============================================================================
+          -- CONTROLLER STATUS TRACKING
+          -- =============================================================================
+
+          -- Controller status table - tracks status per cluster per controller
+          CREATE TABLE IF NOT EXISTS cluster_controller_status (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+              controller_name VARCHAR(255) NOT NULL,
+              observed_generation BIGINT NOT NULL DEFAULT 1,
+              conditions JSONB NOT NULL DEFAULT '[]',
+              metadata JSONB NOT NULL DEFAULT '{}',
+              last_error JSONB,
+              last_updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+              UNIQUE(cluster_id, controller_name)
+          );
+
+          -- NodePool controller status table
+          CREATE TABLE IF NOT EXISTS nodepool_controller_status (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              nodepool_id UUID NOT NULL REFERENCES nodepools(id) ON DELETE CASCADE,
+              controller_name VARCHAR(255) NOT NULL,
+              observed_generation BIGINT NOT NULL DEFAULT 1,
+              conditions JSONB NOT NULL DEFAULT '[]',
+              metadata JSONB NOT NULL DEFAULT '{}',
+              last_error JSONB,
+              last_updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+              UNIQUE(nodepool_id, controller_name)
+          );
+
+          -- Performance indexes for controller status
+          CREATE INDEX IF NOT EXISTS idx_cluster_controller_status_cluster_id ON cluster_controller_status(cluster_id);
+          CREATE INDEX IF NOT EXISTS idx_nodepool_controller_status_nodepool_id ON nodepool_controller_status(nodepool_id);
+
+          EOF
+
+          echo "Database migration completed successfully!"
+        volumeMounts:
+        - name: shared-config
+          mountPath: /shared
+          readOnly: true
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: shared-config
+        emptyDir: {}

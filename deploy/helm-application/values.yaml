@@ -1,0 +1,153 @@
+# Google Cloud Platform Configuration
+gcp:
+  # REQUIRED: GCP Project ID (must match cloud-resources chart)
+  project: ""
+
+# Application namespace
+namespace:
+  name: "cls-system"
+  create: true
+
+# Container image configuration
+image:
+  repository: "gcr.io/apahim-dev-1/cls-backend"
+  tag: "latest"
+  pullPolicy: Always
+
+# Application deployment configuration
+deployment:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+
+# Resource requests and limits
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Service configuration
+service:
+  # Internal ClusterIP service
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# External LoadBalancer service is always created for API Gateway integration
+
+# Database configuration (auto-discovered from cloud-resources chart)
+database:
+  # Cloud SQL instance name (auto-discovered from cloud-resources chart, or set manually)
+  instanceName: ""
+  # Database name (defaults to cls_backend if not specified)
+  databaseName: ""
+  # Username (defaults to cls_user if not specified)
+  username: ""
+  # Password from Secret Manager (auto-discovered from cloud-resources chart)
+  passwordSecret:
+    name: ""                            # Auto-discovered from cloud-resources chart
+    projectId: ""                       # GCP project where secret is stored (defaults to gcp.project)
+
+# Pub/Sub configuration (auto-discovered from cloud-resources chart)
+pubsub:
+  # Topic name (auto-discovered from cloud-resources chart, defaults to cluster-events)
+  clusterEventsTopic: ""
+
+# Service account configuration (auto-discovered from cloud-resources chart)
+serviceAccount:
+  # Kubernetes service account name
+  name: "cls-backend"
+  # GCP service account name (auto-discovered from cloud-resources chart)
+  gcpServiceAccountName: ""
+  # Enable Workload Identity annotation
+  workloadIdentity: true
+
+# Application configuration
+config:
+  # Server configuration
+  port: 8080
+  environment: "production"
+  logLevel: "info"
+  logFormat: "json"
+
+  # Metrics
+  metricsEnabled: true
+  metricsPort: 8081
+
+  # Authentication
+  disableAuth: false
+
+  # Reconciliation configuration
+  reconciliation:
+    enabled: true
+    checkInterval: "1m"
+    maxConcurrent: 50
+    adaptiveEnabled: true
+    healthyInterval: "5m"
+    unhealthyInterval: "30s"
+    defaultInterval: "5m"
+
+  # Aggregation configuration
+  aggregation:
+    enabled: true
+    interval: "30s"
+    batchSize: 50
+    maxConcurrency: 10
+    retryAttempts: 3
+    retryBackoff: "5s"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Liveness and readiness probes
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Pod anti-affinity (prefer spreading across nodes)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - cls-backend
+          topologyKey: kubernetes.io/hostname
+
+# Labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: cls-backend
+  app.kubernetes.io/component: application
+  app.kubernetes.io/part-of: cls-backend
+  app.kubernetes.io/managed-by: helm

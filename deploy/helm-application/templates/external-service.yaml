@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cls-backend-application.fullname" . }}-external
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "cls-backend-application.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loadbalancer
+  annotations:
+    # External LoadBalancer for GKE
+    networking.gke.io/load-balancer-type: "External"
+    # Preserve source IP for better logging/debugging
+    service.beta.kubernetes.io/external-traffic: OnlyLocal
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    {{- include "cls-backend-application.selectorLabels" . | nindent 4 }}
