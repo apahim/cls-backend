@@ -1,0 +1,927 @@
+swagger: "2.0"
+info:
+  title: "CLS Backend User API (OAuth2)"
+  description: |
+    User-facing Cluster Lifecycle Service API with Google OAuth2 authentication.
+
+    **USER ACCESS PATTERN:**
+    Users → Google API Gateway (OAuth2) → cls-backend (X-User-Email header)
+
+    **CONTROLLER ACCESS PATTERN:**
+    Controllers → cls-backend directly (bypass API Gateway)
+
+    This spec covers ONLY user-facing operations through the API Gateway.
+    Controller status updates and operational endpoints access the backend directly.
+
+  version: "5.0.0-user-oauth2"
+  contact:
+    name: CLS Team
+    email: cls-backend@redhat.com
+
+host: "[API GATEWAY URL]"
+schemes:
+  - https
+basePath: /
+
+# OAuth2 Configuration for Users Only
+securityDefinitions:
+  google_oauth2_users:
+    type: oauth2
+    authorizationUrl: https://accounts.google.com/o/oauth2/auth
+    flow: implicit
+    x-google-jwks_uri: https://www.googleapis.com/oauth2/v3/certs
+    x-google-audiences: "32555940559.apps.googleusercontent.com"
+    scopes:
+      openid: OpenID Connect scope
+      email: User email (forwarded as X-User-Email header)
+      profile: User profile information
+
+# Default security (OAuth2 required for all endpoints except health)
+security:
+  - google_oauth2_users: [openid, email]
+
+# Backend configuration with internal load balancer via nip.io
+x-google-backend:
+  address: "[BACKEND_URL]"
+  deadline: 15.0
+  path_translation: APPEND_PATH_TO_ADDRESS
+
+# CORS configuration for Red Hat Console
+x-google-cors:
+  - origin: "https://console.redhat.com"
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    headers: ["Content-Type", "Authorization", "X-User-Email", "X-Request-ID"]
+    maxAge: 86400
+    allowCredentials: true
+  - origin: "https://hybrid-cloud-console.redhat.com"
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    headers: ["Content-Type", "Authorization", "X-User-Email", "X-Request-ID"]
+    maxAge: 86400
+    allowCredentials: true
+
+# USER-FACING ENDPOINTS ONLY (13 total)
+paths:
+  # Health Check (Public - No Authentication)
+  /health:
+    get:
+      summary: Health check endpoint (Public)
+      description: Returns the health status
+      operationId: getHealth
+      security: []  # Override global security - no auth required
+      produces:
+        - application/json
+      responses:
+        200:
+          description: Service is healthy
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [healthy, degraded, unhealthy]
+              timestamp:
+                type: string
+                format: date-time
+              service:
+                type: string
+        503:
+          description: Service is unhealthy
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
+  # Cluster Management Endpoints
+  /api/v1/clusters:
+    get:
+      summary: List user's clusters
+      description: Retrieve clusters owned by the authenticated user
+      operationId: listUserClusters
+      produces:
+        - application/json
+      parameters:
+        - name: limit
+          in: query
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: Maximum number of clusters to return
+        - name: offset
+          in: query
+          type: integer
+          minimum: 0
+          default: 0
+          description: Number of clusters to skip (pagination)
+        - name: status
+          in: query
+          type: string
+          enum: [Pending, Ready, Error, Deleting, Unknown]
+          description: Filter by cluster status
+      responses:
+        200:
+          description: List of user's clusters
+          schema:
+            type: object
+            properties:
+              clusters:
+                type: array
+                items:
+                  $ref: '#/definitions/Cluster'
+              total:
+                type: integer
+              limit:
+                type: integer
+              offset:
+                type: integer
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        500:
+          $ref: '#/responses/InternalError'
+
+    post:
+      summary: Create cluster
+      description: Create a new cluster for the authenticated user
+      operationId: createUserCluster
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ClusterCreateRequest'
+      responses:
+        201:
+          description: Cluster created successfully
+          schema:
+            $ref: '#/definitions/Cluster'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        409:
+          $ref: '#/responses/Conflict'
+        500:
+          $ref: '#/responses/InternalError'
+
+  /api/v1/clusters/{cluster_id}:
+    parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        type: string
+        format: uuid
+        description: Cluster UUID
+
+    get:
+      summary: Get cluster details
+      description: Retrieve cluster details (user must own the cluster)
+      operationId: getUserCluster
+      produces:
+        - application/json
+      responses:
+        200:
+          description: Cluster details
+          schema:
+            $ref: '#/definitions/Cluster'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+    put:
+      summary: Update cluster
+      description: Update cluster (user must own the cluster)
+      operationId: updateUserCluster
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ClusterUpdateRequest'
+      responses:
+        200:
+          description: Cluster updated successfully
+          schema:
+            $ref: '#/definitions/Cluster'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+    delete:
+      summary: Delete cluster
+      description: Delete cluster (user must own the cluster)
+      operationId: deleteUserCluster
+      produces:
+        - application/json
+      parameters:
+        - name: force
+          in: query
+          type: boolean
+          default: false
+          description: Force delete even if cluster has active resources
+      responses:
+        202:
+          description: Cluster deletion initiated
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+              cluster_id:
+                type: string
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+  /api/v1/clusters/{cluster_id}/status:
+    parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        type: string
+        format: uuid
+        description: Cluster UUID
+
+    get:
+      summary: Get cluster status
+      description: Retrieve cluster status (user must own the cluster)
+      operationId: getUserClusterStatus
+      produces:
+        - application/json
+      responses:
+        200:
+          description: Cluster status
+          schema:
+            type: object
+            properties:
+              cluster_id:
+                type: string
+                format: uuid
+              status:
+                $ref: '#/definitions/ClusterStatusInfo'
+              controller_status:
+                type: array
+                items:
+                  $ref: '#/definitions/ClusterControllerStatus'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+  # NodePool Management Endpoints
+  /api/v1/nodepools:
+    get:
+      summary: List user's nodepools
+      description: Retrieve nodepools for clusters owned by the authenticated user
+      operationId: listUserNodePools
+      produces:
+        - application/json
+      parameters:
+        - name: cluster_id
+          in: query
+          type: string
+          format: uuid
+          description: Filter by cluster ID
+        - name: limit
+          in: query
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: Maximum number of nodepools to return
+        - name: offset
+          in: query
+          type: integer
+          minimum: 0
+          default: 0
+          description: Number of nodepools to skip (pagination)
+      responses:
+        200:
+          description: List of user's nodepools
+          schema:
+            type: object
+            properties:
+              nodepools:
+                type: array
+                items:
+                  $ref: '#/definitions/NodePool'
+              total:
+                type: integer
+              limit:
+                type: integer
+              offset:
+                type: integer
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        500:
+          $ref: '#/responses/InternalError'
+
+    post:
+      summary: Create nodepool
+      description: Create a new nodepool in a cluster owned by the authenticated user
+      operationId: createUserNodePool
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/NodePoolCreateRequest'
+      responses:
+        201:
+          description: NodePool created successfully
+          schema:
+            $ref: '#/definitions/NodePool'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        500:
+          $ref: '#/responses/InternalError'
+
+  /api/v1/nodepools/{nodepool_id}:
+    parameters:
+      - name: nodepool_id
+        in: path
+        required: true
+        type: string
+        format: uuid
+        description: NodePool UUID
+
+    get:
+      summary: Get nodepool details
+      description: Retrieve nodepool details (user must own the parent cluster)
+      operationId: getUserNodePool
+      produces:
+        - application/json
+      responses:
+        200:
+          description: NodePool details
+          schema:
+            $ref: '#/definitions/NodePool'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+    put:
+      summary: Update nodepool
+      description: Update nodepool (user must own the parent cluster)
+      operationId: updateUserNodePool
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/NodePoolUpdateRequest'
+      responses:
+        200:
+          description: NodePool updated successfully
+          schema:
+            $ref: '#/definitions/NodePool'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+    delete:
+      summary: Delete nodepool
+      description: Delete nodepool (user must own the parent cluster)
+      operationId: deleteUserNodePool
+      produces:
+        - application/json
+      responses:
+        204:
+          description: NodePool deleted successfully
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+  /api/v1/nodepools/{nodepool_id}/status:
+    parameters:
+      - name: nodepool_id
+        in: path
+        required: true
+        type: string
+        format: uuid
+        description: NodePool UUID
+
+    get:
+      summary: Get nodepool status
+      description: Retrieve nodepool status (user must own the parent cluster)
+      operationId: getUserNodePoolStatus
+      produces:
+        - application/json
+      responses:
+        200:
+          description: NodePool status
+          schema:
+            type: object
+            properties:
+              nodepool_id:
+                type: string
+                format: uuid
+              controller_status:
+                type: array
+                items:
+                  $ref: '#/definitions/NodePoolControllerStatus'
+        400:
+          $ref: '#/responses/BadRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        403:
+          $ref: '#/responses/Forbidden'
+        404:
+          $ref: '#/responses/NotFound'
+        500:
+          $ref: '#/responses/InternalError'
+
+# Schema Definitions (from actual cls-backend Go models)
+definitions:
+  # Cluster Schemas
+  Cluster:
+    type: object
+    properties:
+      id:
+        type: string
+        format: uuid
+      name:
+        type: string
+      target_project_id:
+        type: string
+      created_by:
+        type: string
+        format: email
+      generation:
+        type: integer
+        format: int64
+      resource_version:
+        type: string
+      spec:
+        $ref: '#/definitions/ClusterSpec'
+      status:
+        $ref: '#/definitions/ClusterStatusInfo'
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  ClusterCreateRequest:
+    type: object
+    required: [name, spec]
+    properties:
+      name:
+        type: string
+        pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+        minLength: 3
+        maxLength: 63
+        description: DNS-compatible cluster name
+      target_project_id:
+        type: string
+        description: Target project ID
+      spec:
+        $ref: '#/definitions/ClusterSpec'
+
+  ClusterUpdateRequest:
+    type: object
+    required: [spec]
+    properties:
+      spec:
+        $ref: '#/definitions/ClusterSpec'
+
+  ClusterSpec:
+    type: object
+    properties:
+      infraID:
+        type: string
+      platform:
+        $ref: '#/definitions/PlatformSpec'
+      release:
+        $ref: '#/definitions/ReleaseSpec'
+      networking:
+        $ref: '#/definitions/NetworkingSpec'
+      dns:
+        $ref: '#/definitions/DNSSpec'
+
+  PlatformSpec:
+    type: object
+    required: [type]
+    properties:
+      type:
+        type: string
+        enum: [gcp, aws, azure]
+      gcp:
+        $ref: '#/definitions/GCPSpec'
+
+  GCPSpec:
+    type: object
+    properties:
+      projectID:
+        type: string
+      region:
+        type: string
+      zone:
+        type: string
+
+  ReleaseSpec:
+    type: object
+    properties:
+      image:
+        type: string
+      version:
+        type: string
+
+  NetworkingSpec:
+    type: object
+    properties:
+      clusterNetwork:
+        type: array
+        items:
+          $ref: '#/definitions/NetworkEntry'
+      serviceNetwork:
+        type: array
+        items:
+          type: string
+      podCIDR:
+        type: string
+      serviceCIDR:
+        type: string
+
+  NetworkEntry:
+    type: object
+    properties:
+      cidr:
+        type: string
+      hostPrefix:
+        type: integer
+
+  DNSSpec:
+    type: object
+    properties:
+      baseDomain:
+        type: string
+      publicZone:
+        type: string
+      privateZone:
+        type: string
+
+  # Kubernetes-like Status Schema
+  ClusterStatusInfo:
+    type: object
+    properties:
+      observedGeneration:
+        type: integer
+        format: int64
+      conditions:
+        type: array
+        items:
+          $ref: '#/definitions/Condition'
+      phase:
+        type: string
+        enum: [Pending, Progressing, Ready, Failed]
+      message:
+        type: string
+      reason:
+        type: string
+      lastUpdateTime:
+        type: string
+        format: date-time
+
+  Condition:
+    type: object
+    properties:
+      type:
+        type: string
+      status:
+        type: string
+        enum: [True, False, Unknown]
+      lastTransitionTime:
+        type: string
+        format: date-time
+      reason:
+        type: string
+      message:
+        type: string
+      severity:
+        type: string
+        enum: [Info, Warning, Error, Critical]
+
+  ClusterControllerStatus:
+    type: object
+    properties:
+      cluster_id:
+        type: string
+        format: uuid
+      controller_name:
+        type: string
+      observed_generation:
+        type: integer
+        format: int64
+      conditions:
+        type: array
+        items:
+          $ref: '#/definitions/Condition'
+      metadata:
+        type: object
+        description: Controller-specific metadata
+      last_error:
+        $ref: '#/definitions/ErrorInfo'
+      last_updated:
+        type: string
+        format: date-time
+
+  # NodePool Schemas
+  NodePool:
+    type: object
+    properties:
+      id:
+        type: string
+        format: uuid
+      cluster_id:
+        type: string
+        format: uuid
+      name:
+        type: string
+      generation:
+        type: integer
+        format: int64
+      resource_version:
+        type: string
+      spec:
+        $ref: '#/definitions/NodePoolSpec'
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  NodePoolCreateRequest:
+    type: object
+    required: [name, cluster_id, spec]
+    properties:
+      name:
+        type: string
+        pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+        minLength: 3
+        maxLength: 63
+      cluster_id:
+        type: string
+        format: uuid
+      spec:
+        $ref: '#/definitions/NodePoolSpec'
+
+  NodePoolUpdateRequest:
+    type: object
+    required: [spec]
+    properties:
+      spec:
+        $ref: '#/definitions/NodePoolSpec'
+
+  NodePoolSpec:
+    type: object
+    properties:
+      replicas:
+        type: integer
+        format: int32
+        minimum: 0
+        maximum: 100
+      management:
+        $ref: '#/definitions/NodePoolManagement'
+      platform:
+        $ref: '#/definitions/NodePoolPlatformSpec'
+      release:
+        $ref: '#/definitions/NodePoolReleaseSpec'
+      clusterName:
+        type: string
+      nodeDrainTimeout:
+        type: string
+
+  NodePoolManagement:
+    type: object
+    properties:
+      upgradeType:
+        type: string
+        enum: [Replace, InPlace]
+      autoRepair:
+        type: boolean
+
+  NodePoolPlatformSpec:
+    type: object
+    required: [type]
+    properties:
+      type:
+        type: string
+        enum: [gcp, aws, azure]
+      gcp:
+        $ref: '#/definitions/NodePoolGCPSpec'
+
+  NodePoolGCPSpec:
+    type: object
+    required: [instanceType]
+    properties:
+      instanceType:
+        type: string
+        enum: [e2-standard-2, e2-standard-4, n1-standard-2, n1-standard-4]
+      rootVolume:
+        $ref: '#/definitions/RootVolumeSpec'
+      subnet:
+        type: string
+      serviceAccount:
+        type: string
+      labels:
+        type: object
+        additionalProperties:
+          type: string
+
+  RootVolumeSpec:
+    type: object
+    properties:
+      size:
+        type: integer
+        minimum: 10
+        maximum: 1000
+        description: Size in GB
+      type:
+        type: string
+        enum: [pd-standard, pd-ssd, pd-balanced]
+
+  NodePoolReleaseSpec:
+    type: object
+    properties:
+      image:
+        type: string
+      version:
+        type: string
+
+  NodePoolControllerStatus:
+    type: object
+    properties:
+      nodepool_id:
+        type: string
+        format: uuid
+      controller_name:
+        type: string
+      observed_generation:
+        type: integer
+        format: int64
+      conditions:
+        type: array
+        items:
+          $ref: '#/definitions/Condition'
+      metadata:
+        type: object
+        description: Controller-specific metadata
+      last_error:
+        $ref: '#/definitions/ErrorInfo'
+      last_updated:
+        type: string
+        format: date-time
+
+  # Error Handling
+  ErrorInfo:
+    type: object
+    properties:
+      controllerName:
+        type: string
+      errorType:
+        type: string
+        enum: [Transient, Configuration, Fatal, System]
+      errorCode:
+        type: string
+      message:
+        type: string
+      userActionable:
+        type: boolean
+      suggestions:
+        type: array
+        items:
+          type: string
+      timestamp:
+        type: string
+        format: date-time
+
+  ErrorResponse:
+    type: object
+    required: [error, message, timestamp, request_id]
+    properties:
+      error:
+        type: string
+        description: Error type
+      code:
+        type: string
+        description: Error code
+      message:
+        type: string
+        description: Error message
+      details:
+        type: string
+        description: Additional error details
+      timestamp:
+        type: string
+        format: date-time
+      request_id:
+        type: string
+        description: Request ID for tracking
+
+# Common Response Definitions
+responses:
+  BadRequest:
+    description: Bad request - validation failed
+    schema:
+      $ref: '#/definitions/ErrorResponse'
+
+  Unauthorized:
+    description: Unauthorized - OAuth2 authentication required
+    schema:
+      $ref: '#/definitions/ErrorResponse'
+    headers:
+      WWW-Authenticate:
+        type: string
+        description: 'Bearer realm="CLS Backend OAuth2"'
+
+  Forbidden:
+    description: Forbidden - insufficient permissions
+    schema:
+      $ref: '#/definitions/ErrorResponse'
+
+  NotFound:
+    description: Resource not found
+    schema:
+      $ref: '#/definitions/ErrorResponse'
+
+  Conflict:
+    description: Resource conflict
+    schema:
+      $ref: '#/definitions/ErrorResponse'
+
+  InternalError:
+    description: Internal server error
+    schema:
+      $ref: '#/definitions/ErrorResponse'
