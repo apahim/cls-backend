@@ -7,9 +7,7 @@ metadata:
     app.kubernetes.io/name: cls-backend
     app.kubernetes.io/component: loadbalancer
   annotations:
-    # Allow traffic from Google Cloud API Gateway ranges
-    cloud.google.com/load-balancer-type: "External"
-    service.beta.kubernetes.io/load-balancer-source-ranges: "130.211.0.0/22,35.191.0.0/16"
+    networking.gke.io/load-balancer-type: "External"
 spec:
   type: LoadBalancer
   ports:
