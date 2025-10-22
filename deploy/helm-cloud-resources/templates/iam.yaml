@@ -1,0 +1,86 @@
+{{- if .Values.gcp.project }}
+---
+# IAM Service Account for CLS Backend
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMServiceAccount
+metadata:
+  name: {{ .Values.serviceAccount.name }}
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  displayName: {{ .Values.serviceAccount.displayName }}
+  description: {{ .Values.serviceAccount.description }}
+
+---
+# IAM Policy Binding - Pub/Sub Editor
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: {{ .Values.serviceAccount.name }}-pubsub-editor
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  member: serviceAccount:{{ .Values.serviceAccount.name }}@{{ .Values.gcp.project }}.iam.gserviceaccount.com
+  role: roles/pubsub.editor
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: {{ .Values.gcp.project }}
+
+---
+# IAM Policy Binding - Cloud SQL Client
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: {{ .Values.serviceAccount.name }}-cloudsql-client
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  member: serviceAccount:{{ .Values.serviceAccount.name }}@{{ .Values.gcp.project }}.iam.gserviceaccount.com
+  role: roles/cloudsql.client
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: {{ .Values.gcp.project }}
+
+---
+# IAM Policy Binding - Secret Manager Secret Accessor
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: {{ .Values.serviceAccount.name }}-secretmanager-accessor
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  member: serviceAccount:{{ .Values.serviceAccount.name }}@{{ .Values.gcp.project }}.iam.gserviceaccount.com
+  role: roles/secretmanager.secretAccessor
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: {{ .Values.gcp.project }}
+
+{{- if .Values.workloadIdentity.enabled }}
+---
+# Workload Identity IAM Binding - Allow K8s SA to impersonate GCP SA
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: {{ .Values.serviceAccount.name }}-workload-identity-binding
+  namespace: config-connector
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  member: serviceAccount:{{ default .Values.gcp.project .Values.workloadIdentity.clusterProject }}.svc.id.goog[{{ .Values.workloadIdentity.kubernetesNamespace }}/{{ .Values.workloadIdentity.kubernetesServiceAccount }}]
+  role: roles/iam.workloadIdentityUser
+  resourceRef:
+    apiVersion: iam.cnrm.cloud.google.com/v1beta1
+    kind: IAMServiceAccount
+    name: {{ .Values.serviceAccount.name }}
+{{- end }}
+{{- else }}
+{{- fail "gcp.project is required" }}
+{{- end }}
