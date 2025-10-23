@@ -6,7 +6,7 @@ apiVersion: sql.cnrm.cloud.google.com/v1beta1
 kind: SQLInstance
 metadata:
   name: {{ .Values.database.instance.name }}
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:

@@ -1,3 +1,6 @@
+namespace:
+  name: cls-system
+
 # Google Cloud Platform Configuration
 gcp:
   # REQUIRED: GCP Project ID where resources will be created
