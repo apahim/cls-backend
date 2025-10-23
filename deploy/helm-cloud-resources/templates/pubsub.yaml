@@ -6,6 +6,8 @@ kind: PubSubTopic
 metadata:
   name: {{ .Values.pubsub.clusterEventsTopic }}
   namespace: {{ .Values.namespace.name | quote }}
+  annotations:
+    cnrm.cloud.google.com/project-id: {{ .Values.gcp.project | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:

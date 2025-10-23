@@ -5,7 +5,9 @@ apiVersion: iam.cnrm.cloud.google.com/v1beta1
 kind: IAMServiceAccount
 metadata:
   name: {{ .Values.serviceAccount.name }}
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
+  annotations:
+    cnrm.cloud.google.com/project-id: {{ .Values.gcp.project | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:
@@ -52,7 +54,7 @@ apiVersion: iam.cnrm.cloud.google.com/v1beta1
 kind: IAMPolicyMember
 metadata:
   name: {{ .Values.serviceAccount.name }}-secretmanager-accessor
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:
@@ -70,7 +72,7 @@ apiVersion: iam.cnrm.cloud.google.com/v1beta1
 kind: IAMPolicyMember
 metadata:
   name: {{ .Values.serviceAccount.name }}-workload-identity-binding
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:

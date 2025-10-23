@@ -7,6 +7,8 @@ kind: SQLInstance
 metadata:
   name: {{ .Values.database.instance.name }}
   namespace: {{ .Values.namespace.name | quote }}
+  annotations:
+    cnrm.cloud.google.com/project-id: {{ .Values.gcp.project | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:
@@ -39,6 +41,8 @@ kind: SQLDatabase
 metadata:
   name: {{ .Values.database.database.name | replace "_" "-" }}
   namespace: {{ .Values.namespace.name | quote }}
+  annotations:
+    cnrm.cloud.google.com/project-id: {{ .Values.gcp.project | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:
@@ -55,6 +59,8 @@ kind: SQLUser
 metadata:
   name: {{ .Values.database.user.name | replace "_" "-" }}
   namespace: {{ .Values.namespace.name | quote }}
+  annotations:
+    cnrm.cloud.google.com/project-id: {{ .Values.gcp.project | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:
