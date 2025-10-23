@@ -49,10 +49,8 @@ database:
   databaseName: ""
   # Username (defaults to cls_user if not specified)
   username: ""
-  # Password from Secret Manager (auto-discovered from cloud-resources chart)
   passwordSecret:
-    name: ""                            # Auto-discovered from cloud-resources chart
-    projectId: ""                       # GCP project where secret is stored (defaults to gcp.project)
+    name: "cls-backend-db-password"
 
 # Pub/Sub configuration (auto-discovered from cloud-resources chart)
 pubsub:
@@ -144,6 +142,10 @@ affinity:
                 values:
                   - cls-backend
           topologyKey: kubernetes.io/hostname
+
+# External Secrets Operator configuration
+externalSecrets:
+  refreshInterval: "1h"
 
 # Labels applied to all resources
 commonLabels:

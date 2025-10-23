@@ -27,41 +27,19 @@ spec:
       restartPolicy: Never
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:
-      # Init container to fetch database password from Secret Manager
-      - name: db-password-fetcher
-        image: google/cloud-sdk:alpine
-        command:
-        - /bin/sh
-        - -c
-        - |
-          # Fetch password from Secret Manager (auto-discovered)
-          PASSWORD=$(gcloud secrets versions access latest --secret={{ include "cls-backend-application.getPasswordSecret" . }} --project={{ default .Values.gcp.project .Values.database.passwordSecret.projectId }})
-          # Create DATABASE_URL with fetched password (auto-discovered configuration)
-          DATABASE_URL="postgres://{{ include "cls-backend-application.getDatabaseUsername" . }}:${PASSWORD}@{{ include "cls-backend-application.getDatabaseInstanceName" . }}:5432/{{ include "cls-backend-application.getDatabaseName" . }}?sslmode=require"
-          # Write to shared volume
-          echo -n "$DATABASE_URL" > /shared/DATABASE_URL
-        volumeMounts:
-        - name: shared-config
-          mountPath: /shared
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
-          capabilities:
-            drop:
-            - ALL
       containers:
       - name: migration
         image: postgres:15-alpine
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: cls-backend-db-password
+                key: DATABASE_URL
         command:
         - /bin/sh
         - -c
         - |
-          # Read DATABASE_URL from shared volume
-          export DATABASE_URL=$(cat /shared/DATABASE_URL)
-
           # Wait for database to be ready
           echo "Waiting for database to be ready..."
           until pg_isready -d "$DATABASE_URL"; do
@@ -203,10 +181,6 @@ spec:
           EOF
 
           echo "Database migration completed successfully!"
-        volumeMounts:
-        - name: shared-config
-          mountPath: /shared
-          readOnly: true
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
