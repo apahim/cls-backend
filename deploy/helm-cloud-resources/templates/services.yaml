@@ -1,0 +1,89 @@
+# GCP Service Enablement via Config Connector
+# These services must be enabled before other resources can be created
+
+{{- if .Values.services.enabled }}
+---
+# Cloud Resource Manager API (required for project-level resources)
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: cloudresourcemanager-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: cloudresourcemanager.googleapis.com
+---
+# Cloud SQL Admin API (required for Cloud SQL resources)
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: sqladmin-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: sqladmin.googleapis.com
+---
+# Identity and Access Management (IAM) API
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: iam-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: iam.googleapis.com
+---
+# Cloud Pub/Sub API
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: pubsub-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: pubsub.googleapis.com
+---
+# Secret Manager API
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: secretmanager-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: secretmanager.googleapis.com
+---
+# Service Usage API (required for enabling other services)
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: serviceusage-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: serviceusage.googleapis.com
+---
+# Service Networking API (required for private IP allocation in Cloud SQL)
+apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
+kind: Service
+metadata:
+  name: servicenetworking-googleapis-com
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  projectRef:
+    external: {{ .Values.gcp.project }}
+  serviceId: servicenetworking.googleapis.com
+{{- end }}

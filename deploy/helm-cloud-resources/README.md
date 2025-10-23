@@ -11,12 +11,14 @@ This Helm chart deploys the Google Cloud resources required for the CLS Backend 
 
 This chart creates the following Google Cloud resources:
 
-1. **Cloud SQL PostgreSQL Instance** - Database for CLS Backend
-2. **Cloud SQL Database** - `cls_backend` database within the instance
-3. **Cloud SQL User** - `cls_user` with access to the database
-4. **Pub/Sub Topic** - `cluster-events` topic for event publishing
-5. **IAM Service Account** - Service account for the CLS Backend application
-6. **IAM Policy Bindings** - Required permissions for Pub/Sub and Cloud SQL access
+1. **GCP Service Enablement** - Automatically enables required GCP APIs
+2. **Cloud SQL PostgreSQL Instance** - Database for CLS Backend
+3. **Cloud SQL Database** - `cls_backend` database within the instance
+4. **Cloud SQL User** - `cls_user` with access to the database
+5. **Pub/Sub Topic** - `cluster-events` topic for event publishing
+6. **IAM Service Account** - Service account for the CLS Backend application
+7. **IAM Policy Bindings** - Required permissions for Pub/Sub and Cloud SQL access
+8. **Secret Manager Secret** - Secure password storage
 
 ## Installation
 
@@ -80,9 +82,11 @@ helm install cls-backend-cloud-resources ./deploy/helm-cloud-resources \
 | `database.instance.version` | PostgreSQL version | `"POSTGRES_15"` |
 | `database.database.name` | Database name | `"cls_backend"` |
 | `database.user.name` | Database username | `"cls_user"` |
-| `database.user.password` | Database password | `"cls_secure_password_2024"` |
+| `database.user.passwordSecret.name` | Secret Manager secret name | `"cls-backend-db-password"` |
+| `database.user.passwordSecret.generatePassword` | Auto-generate password | `true` |
 | `pubsub.clusterEventsTopic` | Pub/Sub topic name | `"cluster-events"` |
 | `serviceAccount.name` | Service account name | `"cls-backend"` |
+| `services.enabled` | Enable GCP APIs via Config Connector | `true` |
 
 ## Post-Installation
 
