@@ -13,7 +13,7 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: cloudresourcemanager.googleapis.com
+  resourceID: cloudresourcemanager.googleapis.com
 ---
 # Cloud SQL Admin API (required for Cloud SQL resources)
 apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
@@ -25,7 +25,7 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: sqladmin.googleapis.com
+  resourceID: sqladmin.googleapis.com
 ---
 # Identity and Access Management (IAM) API
 apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
@@ -37,7 +37,7 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: iam.googleapis.com
+  resourceID: iam.googleapis.com
 ---
 # Cloud Pub/Sub API
 apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
@@ -49,7 +49,7 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: pubsub.googleapis.com
+  resourceID: pubsub.googleapis.com
 ---
 # Secret Manager API
 apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
@@ -61,7 +61,7 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: secretmanager.googleapis.com
+  resourceID: secretmanager.googleapis.com
 ---
 # Service Usage API (required for enabling other services)
 apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
@@ -73,7 +73,7 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: serviceusage.googleapis.com
+  resourceID: serviceusage.googleapis.com
 ---
 # Service Networking API (required for private IP allocation in Cloud SQL)
 apiVersion: serviceusage.cnrm.cloud.google.com/v1beta1
@@ -85,5 +85,5 @@ metadata:
 spec:
   projectRef:
     external: {{ .Values.gcp.project }}
-  serviceId: servicenetworking.googleapis.com
+  resourceID: servicenetworking.googleapis.com
 {{- end }}
