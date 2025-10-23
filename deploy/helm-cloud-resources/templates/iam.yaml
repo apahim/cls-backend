@@ -18,7 +18,7 @@ apiVersion: iam.cnrm.cloud.google.com/v1beta1
 kind: IAMPolicyMember
 metadata:
   name: {{ .Values.serviceAccount.name }}-pubsub-editor
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:
@@ -35,7 +35,7 @@ apiVersion: iam.cnrm.cloud.google.com/v1beta1
 kind: IAMPolicyMember
 metadata:
   name: {{ .Values.serviceAccount.name }}-cloudsql-client
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
   labels:
     {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
 spec:

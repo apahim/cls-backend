@@ -4,7 +4,7 @@ apiVersion: apigateway.cnrm.cloud.google.com/v1beta1
 kind: APIGatewayAPIConfig
 metadata:
   name: {{ include "cls-backend-api-gateway.apiConfigId" . }}
-  namespace: config-connector
+  namespace: {{ .Values.namespace.name | quote }}
   labels:
     {{- include "cls-backend-api-gateway.labels" . | nindent 4 }}
 spec:
