@@ -326,6 +326,29 @@ CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-User-Email
 CORS_ALLOW_CREDENTIALS=true
 ```
 
+### External DNS Configuration
+
+```bash
+# Enable external-dns integration for automatic DNS record creation
+EXTERNAL_DNS_ENABLED=false
+
+# DNS hostname for the service (required if enabled)
+EXTERNAL_DNS_HOSTNAME=cls-backend.example.com
+
+# DNS zone (optional, used for validation)
+EXTERNAL_DNS_ZONE=example.com
+
+# TTL for DNS records in seconds (default: 300)
+EXTERNAL_DNS_TTL=300
+```
+
+**External DNS Integration:**
+- **Disabled by default** - Set `EXTERNAL_DNS_ENABLED=true` to enable
+- **Requires hostname** - Must specify the full DNS hostname for the service
+- **Automatic DNS records** - Creates A records pointing to LoadBalancer IP
+- **Works with any DNS provider** - Supports Google Cloud DNS, AWS Route53, Cloudflare, etc.
+- **Custom annotations** - Can add provider-specific annotations via Helm values
+
 ## Database Configuration
 
 ### Connection Pool Tuning
