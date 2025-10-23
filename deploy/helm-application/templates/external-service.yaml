@@ -11,6 +11,19 @@ metadata:
     networking.gke.io/load-balancer-type: "External"
     # Preserve source IP for better logging/debugging
     service.beta.kubernetes.io/external-traffic: OnlyLocal
+    {{- if and .Values.externalDns.enabled .Values.externalDns.hostname }}
+    # External DNS annotations
+    external-dns.alpha.kubernetes.io/hostname: {{ .Values.externalDns.hostname | quote }}
+    {{- if .Values.externalDns.zone }}
+    external-dns.alpha.kubernetes.io/zone: {{ .Values.externalDns.zone | quote }}
+    {{- end }}
+    {{- if .Values.externalDns.ttl }}
+    external-dns.alpha.kubernetes.io/ttl: {{ .Values.externalDns.ttl | quote }}
+    {{- end }}
+    {{- range $key, $value := .Values.externalDns.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
 spec:
   type: LoadBalancer
   ports:
