@@ -101,7 +101,7 @@ spec:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: cls-backend-db-password
+              name: {{ .Values.database.passwordSecret.name }}
               key: DATABASE_URL
         - name: GOOGLE_CLOUD_PROJECT
           valueFrom:
