@@ -5,6 +5,12 @@ gcp:
   # Region for regional resources (Cloud SQL)
   region: "us-central1"
 
+# GCP Service Enablement Configuration
+services:
+  # Enable required GCP APIs before creating other resources
+  # Set to true to enable services via Config Connector
+  enabled: true
+
 # Cloud SQL PostgreSQL Configuration
 database:
   # Instance configuration
