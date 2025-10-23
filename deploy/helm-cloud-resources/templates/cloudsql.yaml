@@ -25,12 +25,14 @@ spec:
     backupConfiguration:
       enabled: true
       pointInTimeRecoveryEnabled: true
-      retainedBackups: 7
+      backupRetentionSettings:
+        retainedBackups: 7
+        retentionUnit: COUNT
     maintenanceWindow:
       day: 7  # Sunday
       hour: 2 # 2 AM
       updateTrack: "stable"
-    deletionProtection: false  # Set to true for production
+    deletionProtectionEnabled: false  # Set to true for production
 
 ---
 # Database within the instance
