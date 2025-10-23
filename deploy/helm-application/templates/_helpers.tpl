@@ -147,29 +147,6 @@ Auto-discover Pub/Sub topic from cloud-resources chart
 {{- end -}}
 {{- end }}
 
-{{/*
-Auto-discover Secret Manager secret from cloud-resources chart
-*/}}
-{{- define "cls-backend-application.getPasswordSecret" -}}
-{{- $manualSecret := .Values.database.passwordSecret.name -}}
-
-{{- /* Try to lookup SecretManagerSecret from Config Connector */ -}}
-{{- $secrets := lookup "secretmanager.cnrm.cloud.google.com/v1beta1" "SecretManagerSecret" "config-connector" "" -}}
-{{- if $secrets.items -}}
-{{- range $secrets.items -}}
-{{- if and (contains "password" .metadata.name) (hasPrefix "cls-backend" .metadata.name) (not $manualSecret) -}}
-{{- .metadata.name -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
-{{- /* Return manual value if provided */ -}}
-{{- if $manualSecret -}}
-{{- $manualSecret -}}
-{{- else -}}
-{{- "cls-backend-db-password" -}}
-{{- end -}}
-{{- end }}
 
 {{/*
 Cross-chart parameter validation for consistency with cloud-resources and API gateway charts
