@@ -28,29 +28,6 @@ spec:
       restartPolicy: Never
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{- if and (eq .Values.database.type "cloud-sql") .Values.database.cloudSql.enableProxy }}
-      # Wait for Cloud SQL Proxy to be ready before starting migration
-      initContainers:
-      - name: wait-for-proxy
-        image: busybox:1.35
-        command: ['sh', '-c']
-        args:
-        - |
-          echo "Waiting for Cloud SQL Proxy to be ready..."
-          until nc -z 127.0.0.1 {{ .Values.database.cloudSql.proxyPort }}; do
-            echo "Proxy not ready, waiting..."
-            sleep 2
-          done
-          echo "Cloud SQL Proxy is ready!"
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
-      {{- end }}
       initContainers:
       - name: copy-migrations
         image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
