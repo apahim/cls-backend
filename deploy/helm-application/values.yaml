@@ -13,7 +13,7 @@ namespace:
 
 # Container image configuration
 image:
-  repository: "gcr.io/apahim-dev-1/cls-backend"
+  repository: "quay.io/apahim/cls-backend"
   tag: "latest"
   pullPolicy: Always
 
