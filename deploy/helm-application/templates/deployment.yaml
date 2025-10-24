@@ -34,11 +34,13 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      containers:
+
       {{- if and (eq .Values.database.type "cloud-sql") .Values.database.cloudSql.enableProxy }}
+      initContainers:
       # Cloud SQL Proxy sidecar for secure database connections
       - name: cloud-sql-proxy
         image: {{ .Values.database.cloudSql.proxyImage }}
+        restartPolicy: Always
         args:
         - "--structured-logs"
         - "--port={{ .Values.database.cloudSql.proxyPort }}"
@@ -60,14 +62,16 @@ spec:
         livenessProbe:
           tcpSocket:
             port: {{ .Values.database.cloudSql.proxyPort }}
-          initialDelaySeconds: 30
+          initialDelaySeconds: 10
           periodSeconds: 60
         readinessProbe:
           tcpSocket:
             port: {{ .Values.database.cloudSql.proxyPort }}
-          initialDelaySeconds: 5
+          initialDelaySeconds: 3
           periodSeconds: 10
       {{- end }}
+
+      containers:
       - name: cls-backend
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
