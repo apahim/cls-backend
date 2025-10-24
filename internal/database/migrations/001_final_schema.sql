@@ -105,7 +105,7 @@ CREATE TABLE reconciliation_schedule (
 
     -- Health-aware interval configuration
     healthy_interval INTERVAL DEFAULT '5 minutes',
-    unhealthy_interval INTERVAL DEFAULT '30 seconds',
+    unhealthy_interval INTERVAL DEFAULT '10 seconds',
     adaptive_enabled BOOLEAN DEFAULT TRUE,
     last_health_check TIMESTAMP,
     is_healthy BOOLEAN DEFAULT NULL,
@@ -244,7 +244,7 @@ BEGIN
             '5 minutes'::INTERVAL,
             TRUE,
             '5 minutes'::INTERVAL,
-            '30 seconds'::INTERVAL,
+            '10 seconds'::INTERVAL,
             TRUE
         );
     ELSE
@@ -389,7 +389,7 @@ BEGIN
             '5 minutes'::INTERVAL,
             TRUE,
             '5 minutes'::INTERVAL,
-            '30 seconds'::INTERVAL,
+            '10 seconds'::INTERVAL,
             TRUE
         );
     END IF;

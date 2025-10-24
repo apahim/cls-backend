@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/apahim/cls-backend/internal/models"
@@ -26,6 +27,30 @@ func NewClustersRepository(client *Client) *ClustersRepository {
 		logger:           utils.NewLogger("clusters_repo"),
 		statusAggregator: NewStatusAggregator(client),
 	}
+}
+
+// isPrivilegedSystemUser checks if the user is a privileged system user that can access all clusters
+func (r *ClustersRepository) isPrivilegedSystemUser(userEmail string) bool {
+	// System users (controllers, operators, etc.) can access all clusters
+	if strings.HasSuffix(userEmail, "@system.local") {
+		return true
+	}
+
+	// Known privileged system users
+	privilegedUsers := []string{
+		"controller@system.local",
+		"operator@system.local",
+		"scheduler@system.local",
+		"system@system.local",
+	}
+
+	for _, privilegedUser := range privilegedUsers {
+		if userEmail == privilegedUser {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Create creates a new cluster
@@ -75,17 +100,33 @@ func (r *ClustersRepository) Create(ctx context.Context, cluster *models.Cluster
 	return nil
 }
 
-// GetByID retrieves a cluster by ID with client isolation
+// GetByID retrieves a cluster by ID with client isolation (skipped for privileged system users)
 func (r *ClustersRepository) GetByID(ctx context.Context, id uuid.UUID, createdBy string) (*models.Cluster, error) {
-	query := `
-		SELECT id, name, target_project_id, created_by,
-			   generation, resource_version, spec, status,
-			   status_dirty, created_at, updated_at, deleted_at
-		FROM clusters
-		WHERE id = $1 AND created_by = $2 AND deleted_at IS NULL`
+	var query string
+	var args []interface{}
+
+	if r.isPrivilegedSystemUser(createdBy) {
+		// Privileged system users can access any cluster
+		query = `
+			SELECT id, name, target_project_id, created_by,
+				   generation, resource_version, spec, status,
+				   status_dirty, created_at, updated_at, deleted_at
+			FROM clusters
+			WHERE id = $1 AND deleted_at IS NULL`
+		args = []interface{}{id}
+	} else {
+		// Regular users can only access their own clusters
+		query = `
+			SELECT id, name, target_project_id, created_by,
+				   generation, resource_version, spec, status,
+				   status_dirty, created_at, updated_at, deleted_at
+			FROM clusters
+			WHERE id = $1 AND created_by = $2 AND deleted_at IS NULL`
+		args = []interface{}{id, createdBy}
+	}
 
 	var cluster models.Cluster
-	err := r.client.QueryRowContext(ctx, query, id, createdBy).Scan(
+	err := r.client.QueryRowContext(ctx, query, args...).Scan(
 		&cluster.ID,
 		&cluster.Name,
 		&cluster.TargetProjectID,
@@ -123,17 +164,33 @@ func (r *ClustersRepository) GetByID(ctx context.Context, id uuid.UUID, createdB
 	return &cluster, nil
 }
 
-// GetByName retrieves a cluster by name with client isolation
+// GetByName retrieves a cluster by name with client isolation (skipped for privileged system users)
 func (r *ClustersRepository) GetByName(ctx context.Context, name string, createdBy string) (*models.Cluster, error) {
-	query := `
-		SELECT id, name, target_project_id, created_by,
-			   generation, resource_version, spec, status,
-			   status_dirty, created_at, updated_at, deleted_at
-		FROM clusters
-		WHERE name = $1 AND created_by = $2 AND deleted_at IS NULL`
+	var query string
+	var args []interface{}
+
+	if r.isPrivilegedSystemUser(createdBy) {
+		// Privileged system users can access any cluster
+		query = `
+			SELECT id, name, target_project_id, created_by,
+				   generation, resource_version, spec, status,
+				   status_dirty, created_at, updated_at, deleted_at
+			FROM clusters
+			WHERE name = $1 AND deleted_at IS NULL`
+		args = []interface{}{name}
+	} else {
+		// Regular users can only access their own clusters
+		query = `
+			SELECT id, name, target_project_id, created_by,
+				   generation, resource_version, spec, status,
+				   status_dirty, created_at, updated_at, deleted_at
+			FROM clusters
+			WHERE name = $1 AND created_by = $2 AND deleted_at IS NULL`
+		args = []interface{}{name, createdBy}
+	}
 
 	var cluster models.Cluster
-	err := r.client.QueryRowContext(ctx, query, name, createdBy).Scan(
+	err := r.client.QueryRowContext(ctx, query, args...).Scan(
 		&cluster.ID,
 		&cluster.Name,
 		&cluster.TargetProjectID,

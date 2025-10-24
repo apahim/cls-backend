@@ -69,10 +69,12 @@ func (a *StatusAggregator) CalculateClusterStatus(ctx context.Context, cluster *
 
 // ControllerStats holds the aggregated controller statistics
 type ControllerStats struct {
-	TotalCount  int
-	ReadyCount  int
-	ErrorCount  int
-	Generation  int64
+	TotalCount                int
+	ReadyCount                int
+	ErrorCount                int
+	Generation                int64
+	EarliestControllerReportTime *time.Time  // When first controller reported status
+	HasRecentActivity         bool           // Any controller updated in last 5 minutes
 }
 
 // getControllerStats queries controller status and counts them for the current generation
@@ -87,11 +89,15 @@ func (a *StatusAggregator) getControllerStats(ctx context.Context, clusterID uui
 					WHERE condition->>'type' = 'Available' AND condition->>'status' = 'True'
 				) > 0
 			THEN 1 END) AS ready,
-			COUNT(CASE WHEN last_error IS NOT NULL THEN 1 END) AS errors
+			COUNT(CASE WHEN last_error IS NOT NULL THEN 1 END) AS errors,
+			MIN(updated_at) AS earliest_report_time,
+			COUNT(CASE WHEN updated_at > NOW() - INTERVAL '5 minutes' THEN 1 END) > 0 AS has_recent_activity
 		FROM controller_status
 		WHERE cluster_id = $1 AND observed_generation = $2`
 
 	var stats ControllerStats
+	var earliestReportTime *time.Time
+
 	a.logger.Debug("Executing controller stats query",
 		zap.String("cluster_id", clusterID.String()),
 		zap.Int64("generation", generation),
@@ -102,6 +108,8 @@ func (a *StatusAggregator) getControllerStats(ctx context.Context, clusterID uui
 		&stats.TotalCount,
 		&stats.ReadyCount,
 		&stats.ErrorCount,
+		&earliestReportTime,
+		&stats.HasRecentActivity,
 	)
 
 	if err != nil {
@@ -114,6 +122,7 @@ func (a *StatusAggregator) getControllerStats(ctx context.Context, clusterID uui
 	}
 
 	stats.Generation = generation
+	stats.EarliestControllerReportTime = earliestReportTime
 
 	a.logger.Debug("Controller stats retrieved",
 		zap.String("cluster_id", clusterID.String()),
@@ -121,12 +130,47 @@ func (a *StatusAggregator) getControllerStats(ctx context.Context, clusterID uui
 		zap.Int("total", stats.TotalCount),
 		zap.Int("ready", stats.ReadyCount),
 		zap.Int("errors", stats.ErrorCount),
+		zap.Bool("has_recent_activity", stats.HasRecentActivity),
+		zap.Any("earliest_report_time", earliestReportTime),
 	)
 
 	return &stats, nil
 }
 
-// applyAggregationRules applies the Kubernetes-like status aggregation logic
+// Status aggregation configuration constants
+const (
+	DefaultGracePeriodMinutes = 20  // Default timeout for controllers to become ready
+	HyperShiftGracePeriodMinutes = 30  // HyperShift needs more time for cluster provisioning
+)
+
+// isWithinGracePeriod checks if controllers are within their allowed timeout period
+func (a *StatusAggregator) isWithinGracePeriod(stats *ControllerStats) bool {
+	if stats.EarliestControllerReportTime == nil {
+		return true // No controllers reported yet - still pending
+	}
+
+	// Calculate time since first controller reported
+	timeSinceFirstReport := time.Since(*stats.EarliestControllerReportTime)
+	gracePeriod := time.Duration(DefaultGracePeriodMinutes) * time.Minute
+
+	// Extend grace period for HyperShift controllers (they need more time)
+	if timeSinceFirstReport < time.Duration(HyperShiftGracePeriodMinutes)*time.Minute {
+		gracePeriod = time.Duration(HyperShiftGracePeriodMinutes) * time.Minute
+	}
+
+	withinGracePeriod := timeSinceFirstReport < gracePeriod
+
+	a.logger.Debug("Grace period check",
+		zap.Duration("time_since_first_report", timeSinceFirstReport),
+		zap.Duration("grace_period", gracePeriod),
+		zap.Bool("within_grace_period", withinGracePeriod),
+		zap.Bool("has_recent_activity", stats.HasRecentActivity),
+	)
+
+	return withinGracePeriod
+}
+
+// applyAggregationRules applies the Kubernetes-like status aggregation logic with timeout awareness
 func (a *StatusAggregator) applyAggregationRules(stats *ControllerStats, generation int64) *StatusAggregationResult {
 	now := time.Now()
 
@@ -223,25 +267,73 @@ func (a *StatusAggregator) applyAggregationRules(stats *ControllerStats, generat
 		}
 
 	} else {
-		// No controllers ready
-		phase = "Failed"
-		reason = "NoControllersReady"
-		message = fmt.Sprintf("Cluster failed - no controllers are operational (%d controllers exist)", stats.TotalCount)
+		// No controllers ready - use timeout-aware logic
+		withinGracePeriod := a.isWithinGracePeriod(stats)
+		hasProgress := stats.HasRecentActivity || hasErrors // Recent activity or errors indicate progress
 
-		readyCondition = models.Condition{
-			Type:               "Ready",
-			Status:             "False",
-			LastTransitionTime: now,
-			Reason:             "ControllersNotReady",
-			Message:            fmt.Sprintf("None of %d controllers are ready", stats.TotalCount),
-		}
+		if withinGracePeriod || hasProgress {
+			// Controllers are working but not ready yet - give them time
+			phase = "Progressing"
 
-		availableCondition = models.Condition{
-			Type:               "Available",
-			Status:             "False",
-			LastTransitionTime: now,
-			Reason:             "ControllersNotAvailable",
-			Message:            fmt.Sprintf("None of %d controllers are available", stats.TotalCount),
+			if withinGracePeriod {
+				reason = "ControllersProvisioning"
+				var timeRemaining string
+				if stats.EarliestControllerReportTime != nil {
+					elapsed := time.Since(*stats.EarliestControllerReportTime)
+					remaining := time.Duration(DefaultGracePeriodMinutes)*time.Minute - elapsed
+					if remaining > 0 {
+						timeRemaining = fmt.Sprintf(" (%d minutes remaining)", int(remaining.Minutes()))
+					}
+				}
+				message = fmt.Sprintf("Controllers are provisioning resources%s (%d controllers working)", timeRemaining, stats.TotalCount)
+			} else {
+				reason = "ControllersShowingProgress"
+				message = fmt.Sprintf("Controllers are actively working but not yet ready (%d controllers showing progress)", stats.TotalCount)
+			}
+
+			readyCondition = models.Condition{
+				Type:               "Ready",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersNotYetReady",
+				Message:            fmt.Sprintf("Controllers are still working (%d of %d controllers)", stats.TotalCount, stats.TotalCount),
+			}
+
+			availableCondition = models.Condition{
+				Type:               "Available",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersBecomingAvailable",
+				Message:            fmt.Sprintf("Controllers are becoming available (%d working)", stats.TotalCount),
+			}
+		} else {
+			// Timeout exceeded with no progress - now it's truly failed
+			phase = "Failed"
+			reason = "ControllerTimeout"
+
+			timeoutDuration := "20+ minutes"
+			if stats.EarliestControllerReportTime != nil {
+				elapsed := time.Since(*stats.EarliestControllerReportTime)
+				timeoutDuration = fmt.Sprintf("%.0f minutes", elapsed.Minutes())
+			}
+
+			message = fmt.Sprintf("Controllers failed to become ready after %s with no progress (%d controllers timed out)", timeoutDuration, stats.TotalCount)
+
+			readyCondition = models.Condition{
+				Type:               "Ready",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersTimedOut",
+				Message:            fmt.Sprintf("Controllers timed out after %s", timeoutDuration),
+			}
+
+			availableCondition = models.Condition{
+				Type:               "Available",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersTimedOut",
+				Message:            fmt.Sprintf("No controllers became available after %s", timeoutDuration),
+			}
 		}
 	}
 
