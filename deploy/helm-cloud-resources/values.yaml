@@ -23,7 +23,9 @@ database:
     diskSize: "20"            # GB
     diskType: "PD_SSD"
     version: "POSTGRES_15"
-    authorizedNetworks: ["0.0.0.0/0"]
+    authorizedNetworks:
+    - name: "EVERYTHING"
+      value: "0.0.0.0/0"
 
   # Database and user configuration (fixed names for consistency)
   database:
