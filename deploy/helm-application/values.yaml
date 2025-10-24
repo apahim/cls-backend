@@ -191,7 +191,7 @@ externalSecrets:
 
 # Labels applied to all resources
 commonLabels:
-  app.kubernetes.io/name: cls-backend
+  app.kubernetes.io/name: cls-backend-application
   app.kubernetes.io/component: application
   app.kubernetes.io/part-of: cls-backend
   app.kubernetes.io/managed-by: helm
