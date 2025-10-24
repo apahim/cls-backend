@@ -1,4 +1,5 @@
 {{- include "cls-backend-application.validateCrossChartParams" . }}
+{{- include "cls-backend-application.validateDatabaseConfig" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -34,6 +35,39 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
+      {{- if and (eq .Values.database.type "cloud-sql") .Values.database.cloudSql.enableProxy }}
+      # Cloud SQL Proxy sidecar for secure database connections
+      - name: cloud-sql-proxy
+        image: {{ .Values.database.cloudSql.proxyImage }}
+        args:
+        - "--structured-logs"
+        - "--port={{ .Values.database.cloudSql.proxyPort }}"
+        - "{{ include "cls-backend-application.cloudSqlConnectionName" . }}"
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.database.cloudSql.proxyPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 60
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.database.cloudSql.proxyPort }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      {{- end }}
       - name: cls-backend
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}

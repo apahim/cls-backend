@@ -22,7 +22,7 @@ spec:
     diskAutoresizeLimit: 100
     ipConfiguration:
       ipv4Enabled: true
-      authorizedNetworks: []
+      authorizedNetworks: {{ .Values.database.instance.authorizedNetworks | toJson }}
       requireSsl: false
     backupConfiguration:
       enabled: true

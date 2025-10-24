@@ -2,6 +2,9 @@
 gcp:
   # REQUIRED: GCP Project ID (must match cloud-resources chart)
   project: ""
+  # GCP region (used for Cloud SQL connection name generation)
+  # Should match the region of your Cloud SQL instance
+  region: "us-central1"
 
 # Application namespace
 namespace:
@@ -59,29 +62,49 @@ externalDns:
     # external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
     # external-dns.alpha.kubernetes.io/aws-health-check-id: "health-check-id"
 
-# Database configuration (must match cloud-resources chart)
+# Database configuration (auto-discovered from cloud-resources chart)
 database:
-  # Cloud SQL instance name (must match cloud-resources database.instance.name)
-  instanceName: "cls-backend-db"
-  # Database name (must match cloud-resources database.database.name)
-  databaseName: "cls_backend"
-  # Username (must match cloud-resources database.user.name)
-  username: "cls_user"
+  # Database connection type: "cloud-sql" or "external"
+  # - "cloud-sql": Use Google Cloud SQL with optional proxy sidecar
+  # - "external": Direct connection to external PostgreSQL instance
+  type: "cloud-sql"
+
+  # Cloud SQL configuration (when type is "cloud-sql")
+  cloudSql:
+    # Connection name in format: PROJECT:REGION:INSTANCE
+    # Leave empty to auto-generate from gcp.project:gcp.region:database.instanceName
+    # Example: "my-project:us-central1:cls-backend-db"
+    connectionName: ""
+    # Enable Cloud SQL Proxy sidecar (recommended for security)
+    enableProxy: true
+    # Proxy image and version
+    proxyImage: "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0"
+    # Proxy port (default 5432 for PostgreSQL)
+    proxyPort: 5432
+
+  # Database instance configuration
+  # For Cloud SQL: instance name (used in connection name generation)
+  # For external: IP address or hostname
+  instanceName: ""
+  # Database name (defaults to cls_backend if not specified)
+  databaseName: ""
+  # Username (defaults to cls_user if not specified)
+  username: ""
+  # Secret containing database password
   passwordSecret:
-    # Secret name created by cloud-resources ESO Password Generator
     name: "cls-backend-db-password"
 
-# Pub/Sub configuration (must match cloud-resources chart)
+# Pub/Sub configuration (auto-discovered from cloud-resources chart)
 pubsub:
-  # Topic name (must match cloud-resources pubsub.clusterEventsTopic)
-  clusterEventsTopic: "cluster-events"
+  # Topic name (auto-discovered from cloud-resources chart, defaults to cluster-events)
+  clusterEventsTopic: ""
 
-# Service account configuration (must match cloud-resources chart)
+# Service account configuration (auto-discovered from cloud-resources chart)
 serviceAccount:
   # Kubernetes service account name
   name: "cls-backend"
-  # GCP service account name (must match cloud-resources serviceAccount.name)
-  gcpServiceAccountName: "cls-backend"
+  # GCP service account name (auto-discovered from cloud-resources chart)
+  gcpServiceAccountName: ""
   # Enable Workload Identity annotation
   workloadIdentity: true
 

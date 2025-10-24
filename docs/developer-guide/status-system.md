@@ -412,22 +412,24 @@ ALTER TABLE clusters ADD COLUMN status_dirty BOOLEAN DEFAULT true; -- Dirty flag
 ### Controller Status Table
 
 ```sql
-CREATE TABLE controller_status (
-    cluster_id UUID NOT NULL,
+CREATE TABLE cluster_controller_status (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
     controller_name VARCHAR(255) NOT NULL,
     observed_generation BIGINT NOT NULL DEFAULT 1,    -- Generation tracking
     conditions JSONB NOT NULL DEFAULT '[]',           -- K8s-like conditions
     metadata JSONB NOT NULL DEFAULT '{}',
     last_error JSONB,                                 -- Error tracking
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    PRIMARY KEY (cluster_id, controller_name)
+    last_updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    UNIQUE(cluster_id, controller_name)
 );
 ```
 
 ### Dirty Tracking Mechanism
 
 ```sql
--- Trigger to mark status dirty when controllers update
+-- Automatic trigger to mark status dirty when controllers update
 CREATE OR REPLACE FUNCTION mark_cluster_status_dirty()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -438,8 +440,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER controller_status_dirty_trigger
-    AFTER INSERT OR UPDATE ON controller_status
+CREATE TRIGGER cluster_controller_status_dirty_trigger
+    AFTER INSERT OR UPDATE ON cluster_controller_status
     FOR EACH ROW
     EXECUTE FUNCTION mark_cluster_status_dirty();
 ```
@@ -489,6 +491,8 @@ GET /api/v1/clusters/{id}/status
 PUT /api/v1/clusters/{id}/status
 ```
 
+**Controller Access**: Controllers using `@system.local` email addresses have privileged access and can read/update status for all clusters, bypassing normal client isolation.
+
 ### Debugging Status Issues
 
 #### Check Individual Controller Status
@@ -507,7 +511,7 @@ SELECT id, name, generation, status_dirty FROM clusters WHERE id = 'cluster-uuid
 
 -- Check controller status for current generation
 SELECT controller_name, observed_generation, conditions, last_error
-FROM controller_status
+FROM cluster_controller_status
 WHERE cluster_id = 'cluster-uuid'
   AND observed_generation = 2;  -- replace with current generation
 ```
@@ -523,9 +527,9 @@ UPDATE clusters SET status_dirty = true WHERE id = 'cluster-uuid';
 
 ### Database Optimization
 
-- **Indexes**: Ensure proper indexes on `(cluster_id, observed_generation)`
-- **JSONB Performance**: PostgreSQL optimized JSON storage
-- **Connection Pooling**: Efficient database connections
+- **Indexes**: Proper indexes on `cluster_id` and `observed_generation`
+- **JSONB Performance**: PostgreSQL optimized JSON storage for conditions
+- **Connection Pooling**: Efficient database connections for status queries
 
 ### Caching Strategy
 
