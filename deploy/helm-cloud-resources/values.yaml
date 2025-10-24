@@ -27,7 +27,7 @@ database:
 
   # Database and user configuration (fixed names for consistency)
   database:
-    name: "localhost"       # Fixed database name
+    name: "cls_backend"       # Fixed database name
   user:
     name: "cls_user"          # Fixed username
     # Password management via External Secrets Operator (ESO)
