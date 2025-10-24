@@ -104,7 +104,7 @@ serviceAccount:
   # Kubernetes service account name
   name: "cls-backend"
   # GCP service account name (auto-discovered from cloud-resources chart)
-  gcpServiceAccountName: ""
+  gcpServiceAccountName: "cls-backend"
   # Enable Workload Identity annotation
   workloadIdentity: true
 
