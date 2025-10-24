@@ -73,7 +73,7 @@ spec:
     valueFrom:
       secretKeyRef:
         name: {{ .Values.database.user.passwordSecret.name }}
-        key: secret-data
+        key: password
 {{- else }}
 {{- fail "gcp.project is required" }}
 {{- end }}

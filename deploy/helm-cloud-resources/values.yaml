@@ -29,11 +29,11 @@ database:
     name: "cls_backend"       # Fixed database name
   user:
     name: "cls_user"          # Fixed username
-    # Password management via Secret Manager
+    # Password management via External Secrets Operator (ESO)
+    # ESO generates a cryptographically secure random password and creates a Kubernetes Secret
+    # Both SQLUser and application deployment reference the same Kubernetes Secret
     passwordSecret:
-      name: "cls-backend-db-password"
-      generatePassword: true  # Generate random password if true
-      password: ""            # Set custom password if generatePassword is false
+      name: "cls-backend-db-password"  # Name of the Kubernetes Secret created by ESO
 
 # Pub/Sub Configuration
 pubsub:

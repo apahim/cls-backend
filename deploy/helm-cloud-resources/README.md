@@ -5,6 +5,7 @@ This Helm chart deploys the Google Cloud resources required for the CLS Backend 
 ## Prerequisites
 
 - Google Kubernetes Engine (GKE) cluster with [Config Connector](https://cloud.google.com/config-connector/docs/overview) installed
+- [External Secrets Operator (ESO)](https://external-secrets.io/) installed for password generation
 - Appropriate IAM permissions to create Cloud SQL instances, Pub/Sub topics, and service accounts
 
 ## Resources Created
@@ -18,7 +19,8 @@ This chart creates the following Google Cloud resources:
 5. **Pub/Sub Topic** - `cluster-events` topic for event publishing
 6. **IAM Service Account** - Service account for the CLS Backend application
 7. **IAM Policy Bindings** - Required permissions for Pub/Sub and Cloud SQL access
-8. **Secret Manager Secret** - Secure password storage
+8. **ESO Password Generator** - Cryptographically secure random password generation
+9. **Kubernetes Secret** - Database password stored in Kubernetes Secret (via ESO)
 
 ## Installation
 
@@ -82,8 +84,7 @@ helm install cls-backend-cloud-resources ./deploy/helm-cloud-resources \
 | `database.instance.version` | PostgreSQL version | `"POSTGRES_15"` |
 | `database.database.name` | Database name | `"cls_backend"` |
 | `database.user.name` | Database username | `"cls_user"` |
-| `database.user.passwordSecret.name` | Secret Manager secret name | `"cls-backend-db-password"` |
-| `database.user.passwordSecret.generatePassword` | Auto-generate password | `true` |
+| `database.user.passwordSecret.name` | Kubernetes secret name (via ESO) | `"cls-backend-db-password"` |
 | `pubsub.clusterEventsTopic` | Pub/Sub topic name | `"cluster-events"` |
 | `serviceAccount.name` | Service account name | `"cls-backend"` |
 | `services.enabled` | Enable GCP APIs via Config Connector | `true` |
@@ -116,14 +117,44 @@ After deployment, use these values for the application chart:
 ## Important Notes
 
 ⚠️ **Security Considerations**:
-- The default password is not secure for production use
-- Consider using Google Secret Manager for password management
+- Database passwords are generated using External Secrets Operator (ESO) with cryptographically secure randomness
+- Passwords are stored in Kubernetes Secrets and automatically synchronized between database and application
 - Review IAM permissions before deploying to production
 
 ⚠️ **Cost Considerations**:
 - Cloud SQL instances incur costs even when not in use
 - Consider the appropriate instance tier for your workload
 - Enable deletion protection in production
+
+## Password Management with ESO
+
+This chart uses External Secrets Operator (ESO) for secure database password management:
+
+### **How it works:**
+1. **Password Generator** creates a cryptographically secure 32-character password
+2. **ExternalSecret** syncs the password to a Kubernetes Secret
+3. **SQLUser** and application both reference the same Kubernetes Secret
+4. Password remains stable across deployments (no regeneration)
+
+### **Password Rotation:**
+To rotate the database password:
+
+```bash
+# Delete the ExternalSecret to trigger new password generation
+kubectl delete externalsecret cls-backend-db-password -n cls-system
+
+# ESO will automatically:
+# 1. Generate a new random password
+# 2. Create a new Kubernetes Secret
+# 3. SQLUser will update the database password
+# 4. Application pods will restart with the new password
+```
+
+### **Benefits:**
+- ✅ **No ArgoCD sync issues** - Eliminates immutable field conflicts
+- ✅ **Truly random passwords** - Cryptographically secure generation
+- ✅ **Automatic coordination** - Database and application use same secret
+- ✅ **GitOps friendly** - No template regeneration issues
 
 ## Troubleshooting
 
@@ -152,7 +183,7 @@ gcloud projects add-iam-policy-binding PROJECT_ID \
 
 ```bash
 # Uninstall the chart (this will delete all created resources)
-helm uninstall cls-backend-cloud-resources --namespace config-connector
+helm uninstall cls-backend-cloud-resources --namespace cls-system
 ```
 
 ⚠️ **Warning**: This will permanently delete your Cloud SQL instance and all data. Make sure to backup your data before uninstalling.
