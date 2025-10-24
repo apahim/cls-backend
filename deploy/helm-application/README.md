@@ -64,12 +64,12 @@ image:
   repository: "gcr.io/your-project/cls-backend"
   tag: "latest"
 
-# Database configuration (must match cloud-resources chart)
+# Database configuration (defaults match cloud-resources chart)
+# Note: Password is automatically managed by ESO Password Generator in cloud-resources chart
 database:
-  instanceName: "cls-backend-db"
-  databaseName: "cls_backend"
-  username: "cls_user"
-  password: "cls_secure_password_2024"
+  instanceName: "cls-backend-db"  # Must match cloud-resources
+  databaseName: "cls_backend"     # Must match cloud-resources
+  username: "cls_user"            # Must match cloud-resources
 
 # Pub/Sub configuration (must match cloud-resources chart)
 pubsub:
@@ -114,7 +114,7 @@ helm install cls-backend-app ./deploy/helm-application \
 | `database.instanceName` | Cloud SQL instance name | `"cls-backend-db"` |
 | `database.databaseName` | Database name | `"cls_backend"` |
 | `database.username` | Database username | `"cls_user"` |
-| `database.password` | Database password | `"cls_secure_password_2024"` |
+| `database.passwordSecret.name` | Secret name for database credentials | `"cls-backend-db-password"` |
 
 ### Pub/Sub Configuration
 

@@ -59,28 +59,29 @@ externalDns:
     # external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
     # external-dns.alpha.kubernetes.io/aws-health-check-id: "health-check-id"
 
-# Database configuration (auto-discovered from cloud-resources chart)
+# Database configuration (must match cloud-resources chart)
 database:
-  # Cloud SQL instance name (auto-discovered from cloud-resources chart, or set manually)
-  instanceName: ""
-  # Database name (defaults to cls_backend if not specified)
-  databaseName: ""
-  # Username (defaults to cls_user if not specified)
-  username: ""
+  # Cloud SQL instance name (must match cloud-resources database.instance.name)
+  instanceName: "cls-backend-db"
+  # Database name (must match cloud-resources database.database.name)
+  databaseName: "cls_backend"
+  # Username (must match cloud-resources database.user.name)
+  username: "cls_user"
   passwordSecret:
+    # Secret name created by cloud-resources ESO Password Generator
     name: "cls-backend-db-password"
 
-# Pub/Sub configuration (auto-discovered from cloud-resources chart)
+# Pub/Sub configuration (must match cloud-resources chart)
 pubsub:
-  # Topic name (auto-discovered from cloud-resources chart, defaults to cluster-events)
-  clusterEventsTopic: ""
+  # Topic name (must match cloud-resources pubsub.clusterEventsTopic)
+  clusterEventsTopic: "cluster-events"
 
-# Service account configuration (auto-discovered from cloud-resources chart)
+# Service account configuration (must match cloud-resources chart)
 serviceAccount:
   # Kubernetes service account name
   name: "cls-backend"
-  # GCP service account name (auto-discovered from cloud-resources chart)
-  gcpServiceAccountName: ""
+  # GCP service account name (must match cloud-resources serviceAccount.name)
+  gcpServiceAccountName: "cls-backend"
   # Enable Workload Identity annotation
   workloadIdentity: true
 

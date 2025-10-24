@@ -74,7 +74,7 @@ Cross-chart parameter validation for consistency with application and API gatewa
 {{- end -}}
 
 {{- if not .Values.database.user.passwordSecret.name -}}
-{{- fail "\n❌ MISSING REQUIRED VALUE: database.user.passwordSecret.name\n\n📋 REQUIRED ACTION:\n   Set database.user.passwordSecret.name for Secret Manager integration\n\n💡 EXAMPLE:\n   database:\n     user:\n       passwordSecret:\n         name: \"cls-backend-db-password\"\n         generatePassword: true\n\n⚠️  IMPORTANT: This value must match database.passwordSecret.name in the application chart\n\n🔗 More info: Secret will be created automatically if generatePassword is true" -}}
+{{- fail "\n❌ MISSING REQUIRED VALUE: database.user.passwordSecret.name\n\n📋 REQUIRED ACTION:\n   Set database.user.passwordSecret.name for ESO password generation\n\n💡 EXAMPLE:\n   database:\n     user:\n       passwordSecret:\n         name: \"cls-backend-db-password\"\n\n⚠️  IMPORTANT: This value must match database.passwordSecret.name in the application chart\n\n🔗 More info: Password will be generated automatically by External Secrets Operator (ESO)" -}}
 {{- end -}}
 
 {{- /* Validate Pub/Sub configuration consistency */ -}}
