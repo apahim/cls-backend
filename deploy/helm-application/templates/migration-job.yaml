@@ -28,7 +28,6 @@ spec:
       restartPolicy: Never
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{- if and (eq .Values.database.type "cloud-sql") .Values.database.cloudSql.enableProxy }}
       initContainers:
       - name: copy-migrations
         image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
