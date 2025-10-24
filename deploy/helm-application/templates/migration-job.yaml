@@ -72,7 +72,14 @@ spec:
         args:
         - "--structured-logs"
         - "--port={{ .Values.database.cloudSql.proxyPort }}"
+        - "--health-check"
+        - "--http-address=0.0.0.0"
+        - "--http-port=9801"
         - "{{ include "cls-backend-application.cloudSqlConnectionName" . }}"
+        ports:
+        - name: health
+          containerPort: 9801
+          protocol: TCP
         securityContext:
           runAsNonRoot: true
           allowPrivilegeEscalation: false
@@ -87,6 +94,28 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: health
+          periodSeconds: 1
+          timeoutSeconds: 5
+          failureThreshold: 20
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: health
+          initialDelaySeconds: 0
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: health
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 12  # 60 seconds total before marking unready
       {{- end }}
       containers:
       - name: migration
