@@ -63,11 +63,12 @@ spec:
           capabilities:
             drop:
             - ALL
-      containers:
       {{- if and (eq .Values.database.type "cloud-sql") .Values.database.cloudSql.enableProxy }}
       # Cloud SQL Proxy sidecar for secure database connections
       - name: cloud-sql-proxy
         image: {{ .Values.database.cloudSql.proxyImage }}
+        # restartPolicy: Always is required for sidecars to remain for the duration of the job
+        restartPolicy: Always
         args:
         - "--structured-logs"
         - "--port={{ .Values.database.cloudSql.proxyPort }}"
@@ -87,6 +88,7 @@ spec:
             memory: "1Gi"
             cpu: "500m"
       {{- end }}
+      containers:
       - name: migration
         image: postgres:15-alpine
         env:
