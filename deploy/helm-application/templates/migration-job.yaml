@@ -131,7 +131,9 @@ spec:
         - -c
         - |
           echo "Starting dynamic database migrations..."
-          echo "Database URL: $DATABASE_URL"
+          # Mask password in DATABASE_URL for logging (show only host, port, database)
+          MASKED_URL=$(echo "$DATABASE_URL" | sed -E 's|(postgres://[^:]+:)[^@]+(@)|\1***\2|')
+          echo "Database URL: $MASKED_URL"
 
           # Wait for database to be ready
           echo "Waiting for database to be ready..."
