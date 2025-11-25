@@ -58,11 +58,13 @@ type ClusterWithObservedGeneration struct {
 
 // ClusterSpec represents the cluster specification
 type ClusterSpec struct {
-	InfraID     string          `json:"infraID"`
-	Platform    PlatformSpec    `json:"platform"`
-	Release     ReleaseSpec     `json:"release"`
-	Networking  NetworkingSpec  `json:"networking"`
-	DNS         DNSSpec         `json:"dns"`
+	InfraID                  string          `json:"infraID"`
+	Platform                 PlatformSpec    `json:"platform"`
+	Release                  ReleaseSpec     `json:"release"`
+	Networking               NetworkingSpec  `json:"networking"`
+	DNS                      DNSSpec         `json:"dns"`
+	ServiceAccountSigningKey string          `json:"serviceAccountSigningKey,omitempty"` // Base64-encoded PEM private key
+	IssuerURL                string          `json:"issuerURL,omitempty"`                // OIDC issuer URL
 }
 
 // PlatformSpec represents platform-specific configuration
@@ -73,9 +75,23 @@ type PlatformSpec struct {
 
 // GCPSpec represents GCP platform configuration
 type GCPSpec struct {
-	ProjectID string `json:"projectID"`
-	Region    string `json:"region"`
-	Zone      string `json:"zone,omitempty"`
+	ProjectID        string                  `json:"projectID"`
+	Region           string                  `json:"region"`
+	WorkloadIdentity *WorkloadIdentityConfig `json:"workloadIdentity,omitempty"`
+}
+
+// WorkloadIdentityConfig represents GCP Workload Identity Federation configuration
+type WorkloadIdentityConfig struct {
+	ProjectNumber       string                      `json:"projectNumber"`
+	PoolID              string                      `json:"poolID"`
+	ProviderID          string                      `json:"providerID"`
+	ServiceAccountsRef  *WIFServiceAccountsRef      `json:"serviceAccountsRef,omitempty"`
+}
+
+// WIFServiceAccountsRef represents GCP service account references for WIF
+type WIFServiceAccountsRef struct {
+	NodePoolEmail      string `json:"nodePoolEmail"`
+	ControlPlaneEmail  string `json:"controlPlaneEmail"`
 }
 
 // ReleaseSpec represents the OpenShift release configuration
