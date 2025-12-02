@@ -14,26 +14,26 @@ import (
 type ErrorType string
 
 const (
-	ErrorTypeValidation    ErrorType = "validation"
-	ErrorTypeNotFound      ErrorType = "not_found"
-	ErrorTypeConflict      ErrorType = "conflict"
-	ErrorTypeUnauthorized  ErrorType = "unauthorized"
-	ErrorTypeForbidden     ErrorType = "forbidden"
-	ErrorTypeInternal      ErrorType = "internal"
-	ErrorTypeExternal      ErrorType = "external"
-	ErrorTypeRateLimit     ErrorType = "rate_limit"
-	ErrorTypeUnavailable   ErrorType = "unavailable"
+	ErrorTypeValidation   ErrorType = "validation"
+	ErrorTypeNotFound     ErrorType = "not_found"
+	ErrorTypeConflict     ErrorType = "conflict"
+	ErrorTypeUnauthorized ErrorType = "unauthorized"
+	ErrorTypeForbidden    ErrorType = "forbidden"
+	ErrorTypeInternal     ErrorType = "internal"
+	ErrorTypeExternal     ErrorType = "external"
+	ErrorTypeRateLimit    ErrorType = "rate_limit"
+	ErrorTypeUnavailable  ErrorType = "unavailable"
 )
 
 // Error codes
 const (
-	ErrCodeValidation    = "VALIDATION_FAILED"
-	ErrCodeNotFound      = "RESOURCE_NOT_FOUND"
-	ErrCodeConflict      = "RESOURCE_CONFLICT"
-	ErrCodeInternal      = "INTERNAL_ERROR"
-	ErrCodeExternal      = "EXTERNAL_ERROR"
-	ErrCodeUnauthorized  = "UNAUTHORIZED"
-	ErrCodeForbidden     = "FORBIDDEN"
+	ErrCodeValidation   = "VALIDATION_FAILED"
+	ErrCodeNotFound     = "RESOURCE_NOT_FOUND"
+	ErrCodeConflict     = "RESOURCE_CONFLICT"
+	ErrCodeInternal     = "INTERNAL_ERROR"
+	ErrCodeExternal     = "EXTERNAL_ERROR"
+	ErrCodeUnauthorized = "UNAUTHORIZED"
+	ErrCodeForbidden    = "FORBIDDEN"
 )
 
 // APIError represents a structured API error
@@ -242,7 +242,7 @@ func IsPostgreSQLUniqueConstraintViolation(err error) bool {
 
 	errStr := err.Error()
 	return strings.Contains(errStr, "duplicate key value violates unique constraint") ||
-		   strings.Contains(errStr, "pq: duplicate key value violates unique constraint")
+		strings.Contains(errStr, "pq: duplicate key value violates unique constraint")
 }
 
 // IsClusterNameConflict checks if an error is specifically a cluster name conflict
@@ -253,8 +253,8 @@ func IsClusterNameConflict(err error) bool {
 
 	errStr := err.Error()
 	return IsPostgreSQLUniqueConstraintViolation(err) &&
-		   (strings.Contains(errStr, "clusters_name_created_by_key") ||
-		    strings.Contains(errStr, "clusters_name_key"))
+		(strings.Contains(errStr, "clusters_name_created_by_key") ||
+			strings.Contains(errStr, "clusters_name_key"))
 }
 
 // ConvertDBError converts database errors to appropriate API errors

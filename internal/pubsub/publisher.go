@@ -96,7 +96,6 @@ func (p *Publisher) PublishNodePoolEvent(ctx context.Context, eventType string, 
 	return nil
 }
 
-
 // Convenience methods for common events
 
 // PublishClusterCreated publishes a cluster created event
@@ -128,7 +127,6 @@ func (p *Publisher) PublishNodePoolUpdated(ctx context.Context, nodepool *models
 func (p *Publisher) PublishNodePoolDeleted(ctx context.Context, nodepool *models.NodePool) error {
 	return p.PublishNodePoolEvent(ctx, EventTypeNodePoolDeleted, nodepool)
 }
-
 
 // PublishReconciliationEvent publishes a reconciliation event (fan-out to all controllers)
 func (p *Publisher) PublishReconciliationEvent(ctx context.Context, event *models.ReconciliationEvent) error {

@@ -536,7 +536,6 @@ func (r *StatusRepository) ListClusterEvents(ctx context.Context, clusterID uuid
 	return events, nil
 }
 
-
 // getClusterErrors retrieves detailed error information for a cluster
 func (r *StatusRepository) getClusterErrors(ctx context.Context, clusterID uuid.UUID) ([]models.ErrorInfo, error) {
 	query := `

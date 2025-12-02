@@ -162,21 +162,21 @@ func TestIsSystemUser(t *testing.T) {
 
 func TestNewUserContext(t *testing.T) {
 	tests := []struct {
-		name             string
-		email            string
-		expectedEmail    string
+		name                 string
+		email                string
+		expectedEmail        string
 		expectedIsController bool
 	}{
 		{
-			name:             "controller email creates controller context",
-			email:            "controller@system.local",
-			expectedEmail:    "controller@system.local",
+			name:                 "controller email creates controller context",
+			email:                "controller@system.local",
+			expectedEmail:        "controller@system.local",
 			expectedIsController: true,
 		},
 		{
-			name:             "regular email creates user context",
-			email:            "user@example.com",
-			expectedEmail:    "user@example.com",
+			name:                 "regular email creates user context",
+			email:                "user@example.com",
+			expectedEmail:        "user@example.com",
 			expectedIsController: false,
 		},
 	}

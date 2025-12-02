@@ -27,14 +27,14 @@ type DatabaseChangeNotification struct {
 
 // DatabaseChangeListener listens for database change notifications and triggers reconciliation
 type DatabaseChangeListener struct {
-	dbConfig   *config.DatabaseConfig
-	publisher  *pubsub.Publisher
-	logger     *utils.Logger
-	conn       *pgx.Conn
-	running    bool
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
-	mu         sync.Mutex
+	dbConfig  *config.DatabaseConfig
+	publisher *pubsub.Publisher
+	logger    *utils.Logger
+	conn      *pgx.Conn
+	running   bool
+	stopChan  chan struct{}
+	wg        sync.WaitGroup
+	mu        sync.Mutex
 
 	// Debouncing to prevent rapid-fire events
 	lastEventTime map[string]time.Time

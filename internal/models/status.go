@@ -11,34 +11,34 @@ import (
 
 // ClusterControllerStatus represents the status of a controller for a cluster
 type ClusterControllerStatus struct {
-	ClusterID          uuid.UUID   `json:"cluster_id" db:"cluster_id"`
-	ControllerName     string      `json:"controller_name" db:"controller_name"`
-	ObservedGeneration int64       `json:"observed_generation" db:"observed_generation"`
+	ClusterID          uuid.UUID     `json:"cluster_id" db:"cluster_id"`
+	ControllerName     string        `json:"controller_name" db:"controller_name"`
+	ObservedGeneration int64         `json:"observed_generation" db:"observed_generation"`
 	Conditions         ConditionList `json:"conditions" db:"conditions"`
-	Metadata           JSONB       `json:"metadata,omitempty" db:"metadata"`
-	LastError          *ErrorInfo  `json:"last_error,omitempty" db:"last_error"`
-	LastUpdated        time.Time   `json:"last_updated" db:"updated_at"`
+	Metadata           JSONB         `json:"metadata,omitempty" db:"metadata"`
+	LastError          *ErrorInfo    `json:"last_error,omitempty" db:"last_error"`
+	LastUpdated        time.Time     `json:"last_updated" db:"updated_at"`
 }
 
 // NodePoolControllerStatus represents the status of a controller for a node pool
 type NodePoolControllerStatus struct {
-	NodePoolID         uuid.UUID   `json:"nodepool_id" db:"nodepool_id"`
-	ControllerName     string      `json:"controller_name" db:"controller_name"`
-	ObservedGeneration int64       `json:"observed_generation" db:"observed_generation"`
+	NodePoolID         uuid.UUID     `json:"nodepool_id" db:"nodepool_id"`
+	ControllerName     string        `json:"controller_name" db:"controller_name"`
+	ObservedGeneration int64         `json:"observed_generation" db:"observed_generation"`
 	Conditions         ConditionList `json:"conditions" db:"conditions"`
-	Metadata           JSONB       `json:"metadata,omitempty" db:"metadata"`
-	LastError          *ErrorInfo  `json:"last_error,omitempty" db:"last_error"`
-	LastUpdated        time.Time   `json:"last_updated" db:"updated_at"`
+	Metadata           JSONB         `json:"metadata,omitempty" db:"metadata"`
+	LastError          *ErrorInfo    `json:"last_error,omitempty" db:"last_error"`
+	LastUpdated        time.Time     `json:"last_updated" db:"updated_at"`
 }
 
 // ClusterEvent represents a cluster change event
 type ClusterEvent struct {
-	ID           uuid.UUID `json:"id" db:"id"`
-	ClusterID    uuid.UUID `json:"cluster_id" db:"cluster_id"`
-	EventType    string    `json:"event_type" db:"event_type"` // created, updated, deleted
-	Generation   int64     `json:"generation" db:"generation"`
-	Changes      JSONB     `json:"changes,omitempty" db:"changes"`
-	PublishedAt  time.Time `json:"published_at" db:"published_at"`
+	ID          uuid.UUID `json:"id" db:"id"`
+	ClusterID   uuid.UUID `json:"cluster_id" db:"cluster_id"`
+	EventType   string    `json:"event_type" db:"event_type"` // created, updated, deleted
+	Generation  int64     `json:"generation" db:"generation"`
+	Changes     JSONB     `json:"changes,omitempty" db:"changes"`
+	PublishedAt time.Time `json:"published_at" db:"published_at"`
 }
 
 // StatusEvent represents a status update event from controllers
@@ -109,15 +109,15 @@ func (ei *ErrorInfo) Scan(value interface{}) error {
 
 // ClusterStatusSummary represents aggregated cluster status
 type ClusterStatusSummary struct {
-	ID                uuid.UUID  `json:"id" db:"id"`
-	Name              string     `json:"name" db:"name"`
-	Namespace         string     `json:"namespace" db:"namespace"`
-	Generation        int64      `json:"generation" db:"generation"`
-	TotalControllers  int        `json:"total_controllers" db:"total_controllers"`
-	ReadyControllers  int        `json:"ready_controllers" db:"ready_controllers"`
-	LastStatusUpdate  *time.Time `json:"last_status_update" db:"last_status_update"`
-	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
+	ID               uuid.UUID  `json:"id" db:"id"`
+	Name             string     `json:"name" db:"name"`
+	Namespace        string     `json:"namespace" db:"namespace"`
+	Generation       int64      `json:"generation" db:"generation"`
+	TotalControllers int        `json:"total_controllers" db:"total_controllers"`
+	ReadyControllers int        `json:"ready_controllers" db:"ready_controllers"`
+	LastStatusUpdate *time.Time `json:"last_status_update" db:"last_status_update"`
+	CreatedAt        time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // StatusAggregationRequest represents a request to aggregate status

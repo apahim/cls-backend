@@ -18,39 +18,39 @@ func TestAccessControlFlow(t *testing.T) {
 
 	// Test scenarios
 	scenarios := []struct {
-		name           string
-		email          string
-		expectedAccess AccessLevel
-		canAccess      bool
-		canUpdate      bool
-		canDelete      bool
+		name            string
+		email           string
+		expectedAccess  AccessLevel
+		canAccess       bool
+		canUpdate       bool
+		canDelete       bool
 		canReportStatus bool
 	}{
 		{
-			name:           "Controller System Access",
-			email:          "controller@system.local",
-			expectedAccess: SystemAccess,
-			canAccess:      true,
-			canUpdate:      true,
-			canDelete:      true,
+			name:            "Controller System Access",
+			email:           "controller@system.local",
+			expectedAccess:  SystemAccess,
+			canAccess:       true,
+			canUpdate:       true,
+			canDelete:       true,
 			canReportStatus: true,
 		},
 		{
-			name:           "Cluster Owner Access",
-			email:          "alice@example.com",
-			expectedAccess: UserAccess,
-			canAccess:      true,
-			canUpdate:      true,
-			canDelete:      true,
+			name:            "Cluster Owner Access",
+			email:           "alice@example.com",
+			expectedAccess:  UserAccess,
+			canAccess:       true,
+			canUpdate:       true,
+			canDelete:       true,
 			canReportStatus: false,
 		},
 		{
-			name:           "Different User Access",
-			email:          "bob@example.com",
-			expectedAccess: UserAccess,
-			canAccess:      false,
-			canUpdate:      false,
-			canDelete:      false,
+			name:            "Different User Access",
+			email:           "bob@example.com",
+			expectedAccess:  UserAccess,
+			canAccess:       false,
+			canUpdate:       false,
+			canDelete:       false,
 			canReportStatus: false,
 		},
 	}

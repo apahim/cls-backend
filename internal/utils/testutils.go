@@ -180,4 +180,3 @@ func AssertContains(t *testing.T, str, substr string, msgAndArgs ...interface{})
 		t.Errorf("Expected '%s' to contain '%s'. %v", str, substr, msgAndArgs)
 	}
 }
-

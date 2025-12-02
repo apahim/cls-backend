@@ -131,7 +131,6 @@ func TestPubSubConfigCustomValues(t *testing.T) {
 	utils.AssertEqual(t, 200, cfg.PubSub.MaxOutstandingMessages, "Custom max outstanding messages")
 }
 
-
 func TestGetStringSliceEnv(t *testing.T) {
 	tests := []struct {
 		name         string
