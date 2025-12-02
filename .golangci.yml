@@ -1,0 +1,100 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Static analysis checks
+    - unused        # Check for unused code
+    - gofmt         # Check formatting
+    - goimports     # Check import formatting
+    - misspell      # Check for misspelled words
+    - revive        # Fast, configurable, extensible linter
+    - gosec         # Security issues
+    - bodyclose     # Check HTTP response body is closed
+    - noctx         # Find sending http request without context.Context
+    - errname       # Check error naming conventions
+    - gocritic      # Opinionated Go linter
+    - stylecheck    # Replacement for golint
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow      # Can be too strict
+      - fieldalignment  # Performance optimization, not critical
+
+  revive:
+    confidence: 0.8
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: package-comments
+        disabled: true  # Not enforcing package comments
+      - name: range
+      - name: receiver-naming
+      - name: indent-error-flow
+      - name: superfluous-else
+      - name: unreachable-code
+
+  gosec:
+    excludes:
+      - G404  # Use of weak random number generator - OK for non-crypto use
+
+  goimports:
+    local-prefixes: github.com/apahim/cls-backend
+
+  misspell:
+    locale: US
+
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016"]
+    # ST1000: Incorrect or missing package comment
+    # ST1003: Underscores in Go names (we use them in test helpers)
+    # ST1016: Receiver name conventions (too strict)
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Exclude some linters from running on tests
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - gocritic
+
+    # Exclude known issues in generated code
+    - path: ".*\\.pb\\.go"
+      linters:
+        - all
+
+    # Allow unused parameters in interface implementations
+    - text: "is unused"
+      linters:
+        - unused
+      source: "^func.*ctx context\\.Context.*\\{"
+
+  # Show all issues
+  exclude: []
+
+output:
+  sort-results: true

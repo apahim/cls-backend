@@ -1,0 +1,112 @@
+name: Build and Push to Quay.io
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: quay.io
+  IMAGE_NAME: ${{ secrets.QUAY_REPOSITORY || 'cls-backend/cls-backend' }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for proper version tags
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          # Get version from git
+          VERSION=$(git describe --tags --always --dirty)
+          GIT_COMMIT=$(git rev-parse HEAD)
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          SHORT_SHA=$(echo ${GIT_COMMIT} | cut -c1-7)
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "git_commit=${GIT_COMMIT}" >> $GITHUB_OUTPUT
+          echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+          # Determine tags
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHORT_SHA}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+
+          # If this is a tagged release, add version tag
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            TAG_VERSION=${GITHUB_REF#refs/tags/}
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_VERSION}"
+          fi
+
+          # Add date-based tag for tracking
+          DATE_TAG=$(date -u +%Y%m%d)
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${DATE_TAG}"
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+          echo "Image will be tagged as:"
+          echo "${TAGS}" | tr ',' '\n'
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            GIT_COMMIT=${{ steps.meta.outputs.git_commit }}
+            BUILD_TIME=${{ steps.meta.outputs.build_time }}
+          labels: |
+            org.opencontainers.image.title=CLS Backend
+            org.opencontainers.image.description=Cluster Lifecycle Service Backend API
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.git_commit }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.build_time }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+
+      - name: Image digest
+        run: echo "Image pushed successfully with digest ${{ steps.build.outputs.digest }}"
+
+      - name: Create deployment summary
+        run: |
+          echo "## Container Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ steps.meta.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tags Published" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull Command" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
