@@ -77,6 +77,9 @@ type PlatformSpec struct {
 type GCPSpec struct {
 	ProjectID        string                  `json:"projectID"`
 	Region           string                  `json:"region"`
+	Network          string                  `json:"network"`
+	Subnet           string                  `json:"subnet"`
+	EndpointAccess   string                  `json:"endpointAccess,omitempty"`
 	WorkloadIdentity *WorkloadIdentityConfig `json:"workloadIdentity,omitempty"`
 }
 
