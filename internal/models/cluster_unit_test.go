@@ -112,7 +112,6 @@ func TestClusterSpecSerialization(t *testing.T) {
 			GCP: &GCPSpec{
 				ProjectID: "test-project",
 				Region:    "us-central1",
-				Zone:      "us-central1-a",
 			},
 		},
 		Release: ReleaseSpec{
