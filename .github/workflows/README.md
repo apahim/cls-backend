@@ -33,7 +33,6 @@ This directory contains CI/CD workflows for the CLS Backend project.
 
 **Triggers:**
 - On pushes to `main` branch (i.e., when PRs are merged)
-- On Git tags matching `v*` (e.g., `v1.0.0`)
 
 **Jobs:**
 - **Build and Push**: Multi-platform container build
@@ -44,14 +43,12 @@ This directory contains CI/CD workflows for the CLS Backend project.
 - `<SHORT_SHA>` - 7-character commit SHA (e.g., `693fb2c`)
 - `latest` - Always points to the most recent main branch build
 - `<YYYYMMDD>` - Date-based tag (e.g., `20251202`)
-- `<VERSION>` - Git tag version (only for tagged releases, e.g., `v1.0.0`)
 
 **Example:**
 ```
 quay.io/your-org/cls-backend:693fb2c
 quay.io/your-org/cls-backend:latest
 quay.io/your-org/cls-backend:20251202
-quay.io/your-org/cls-backend:v1.0.0  (if tagged)
 ```
 
 ---

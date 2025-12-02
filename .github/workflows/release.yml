@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
 
 env:
   REGISTRY: quay.io
@@ -52,12 +50,6 @@ jobs:
           # Determine tags
           TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHORT_SHA}"
           TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-          # If this is a tagged release, add version tag
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG_VERSION=${GITHUB_REF#refs/tags/}
-            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_VERSION}"
-          fi
 
           # Add date-based tag for tracking
           DATE_TAG=$(date -u +%Y%m%d)
