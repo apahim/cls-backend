@@ -27,12 +27,12 @@ func NewStatusAggregator(client *Client) *StatusAggregator {
 
 // StatusAggregationResult contains the computed status information
 type StatusAggregationResult struct {
-	Status             *models.ClusterStatusInfo `json:"status"`
-	TotalControllers   int                      `json:"total_controllers"`
-	ReadyControllers   int                      `json:"ready_controllers"`
-	FailedControllers  int                      `json:"failed_controllers"`
-	HasErrors          bool                     `json:"has_errors"`
-	Generation         int64                    `json:"generation"`
+	Status            *models.ClusterStatusInfo `json:"status"`
+	TotalControllers  int                       `json:"total_controllers"`
+	ReadyControllers  int                       `json:"ready_controllers"`
+	FailedControllers int                       `json:"failed_controllers"`
+	HasErrors         bool                      `json:"has_errors"`
+	Generation        int64                     `json:"generation"`
 }
 
 // CalculateClusterStatus performs real-time status aggregation for a cluster
@@ -69,12 +69,12 @@ func (a *StatusAggregator) CalculateClusterStatus(ctx context.Context, cluster *
 
 // ControllerStats holds the aggregated controller statistics
 type ControllerStats struct {
-	TotalCount                int
-	ReadyCount                int
-	ErrorCount                int
-	Generation                int64
-	EarliestControllerReportTime *time.Time  // When first controller reported status
-	HasRecentActivity         bool           // Any controller updated in last 5 minutes
+	TotalCount                   int
+	ReadyCount                   int
+	ErrorCount                   int
+	Generation                   int64
+	EarliestControllerReportTime *time.Time // When first controller reported status
+	HasRecentActivity            bool       // Any controller updated in last 5 minutes
 }
 
 // getControllerStats queries controller status and counts them for the current generation
@@ -139,8 +139,8 @@ func (a *StatusAggregator) getControllerStats(ctx context.Context, clusterID uui
 
 // Status aggregation configuration constants
 const (
-	DefaultGracePeriodMinutes = 20  // Default timeout for controllers to become ready
-	HyperShiftGracePeriodMinutes = 30  // HyperShift needs more time for cluster provisioning
+	DefaultGracePeriodMinutes    = 20 // Default timeout for controllers to become ready
+	HyperShiftGracePeriodMinutes = 30 // HyperShift needs more time for cluster provisioning
 )
 
 // isWithinGracePeriod checks if controllers are within their allowed timeout period
@@ -175,10 +175,10 @@ func (a *StatusAggregator) applyAggregationRules(stats *ControllerStats, generat
 	now := time.Now()
 
 	var (
-		phase            string
-		reason           string
-		message          string
-		readyCondition   models.Condition
+		phase              string
+		reason             string
+		message            string
+		readyCondition     models.Condition
 		availableCondition models.Condition
 	)
 

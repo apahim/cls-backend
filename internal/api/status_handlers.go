@@ -41,8 +41,6 @@ func (h *StatusHandler) RegisterRoutes(r *gin.RouterGroup) {
 	}
 }
 
-
-
 // TriggerStatusAggregation manually triggers status aggregation for a cluster
 func (h *StatusHandler) TriggerStatusAggregation(c *gin.Context) {
 	idParam := c.Param("id")
@@ -126,10 +124,10 @@ func (h *StatusHandler) TriggerStatusAggregation(c *gin.Context) {
 
 	// Build result from calculated status
 	result := map[string]interface{}{
-		"cluster_id":        cluster.ID.String(),
-		"status":            cluster.Status, // K8s-like status structure
-		"generation":        cluster.Generation,
-		"last_updated":      cluster.UpdatedAt,
+		"cluster_id":   cluster.ID.String(),
+		"status":       cluster.Status, // K8s-like status structure
+		"generation":   cluster.Generation,
+		"last_updated": cluster.UpdatedAt,
 	}
 
 	h.logger.Info("Status aggregation completed",

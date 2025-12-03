@@ -14,10 +14,10 @@ var (
 
 // ListOptions represents common filtering and pagination options
 type ListOptions struct {
-	Status    string `json:"status,omitempty"`
-	Health    string `json:"health,omitempty"`
-	Limit     int    `json:"limit,omitempty"`
-	Offset    int    `json:"offset,omitempty"`
+	Status string `json:"status,omitempty"`
+	Health string `json:"health,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
 }
 
 // Validate validates the list options

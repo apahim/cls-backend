@@ -53,7 +53,6 @@ type NodePoolEvent struct {
 	Source     string    `json:"source"`
 }
 
-
 // NewClusterEvent creates a new lightweight cluster event
 func NewClusterEvent(eventType string, clusterID uuid.UUID, generation int64) *ClusterEvent {
 	return &ClusterEvent{
@@ -79,7 +78,6 @@ func NewNodePoolEvent(eventType string, clusterID, nodepoolID uuid.UUID, generat
 	}
 }
 
-
 // ToJSON serializes an event to JSON
 func (e *ClusterEvent) ToJSON() ([]byte, error) {
 	return json.Marshal(e)
@@ -89,7 +87,6 @@ func (e *ClusterEvent) ToJSON() ([]byte, error) {
 func (e *NodePoolEvent) ToJSON() ([]byte, error) {
 	return json.Marshal(e)
 }
-
 
 // FromJSON deserializes a cluster event from JSON
 func ClusterEventFromJSON(data []byte) (*ClusterEvent, error) {
@@ -104,7 +101,6 @@ func NodePoolEventFromJSON(data []byte) (*NodePoolEvent, error) {
 	err := json.Unmarshal(data, &event)
 	return &event, err
 }
-
 
 // GetAttributes returns message attributes for the event
 func (e *ClusterEvent) GetAttributes() map[string]string {
@@ -129,4 +125,3 @@ func (e *NodePoolEvent) GetAttributes() map[string]string {
 	}
 	return attrs
 }
-

@@ -16,9 +16,9 @@ import (
 // ReactiveReconciliationConfig represents the configuration for reactive reconciliation
 type ReactiveReconciliationConfig struct {
 	Enabled              bool          `json:"enabled"`
-	ChangeTypes          []string      `json:"change_types"`          // ["spec", "status", "controller_status"]
-	DebounceInterval     time.Duration `json:"debounce_interval"`     // Prevent rapid-fire events
-	MaxEventsPerMinute   int           `json:"max_events_per_minute"` // Rate limiting
+	ChangeTypes          []string      `json:"change_types"`           // ["spec", "status", "controller_status"]
+	DebounceInterval     time.Duration `json:"debounce_interval"`      // Prevent rapid-fire events
+	MaxEventsPerMinute   int           `json:"max_events_per_minute"`  // Rate limiting
 	DatabasePollInterval time.Duration `json:"database_poll_interval"` // How often to check DB config (fan-out to all controllers)
 }
 
@@ -260,20 +260,20 @@ func (r *ReactiveReconciler) GetStats() map[string]interface{} {
 	defer r.stats.mu.RUnlock()
 
 	stats := map[string]interface{}{
-		"running":                    r.IsRunning(),
-		"enabled":                    r.isEnabled(),
-		"config_enabled":             r.config.Enabled,
-		"database_config_enabled":    r.stats.DatabaseConfigEnabled,
-		"events_received":            r.stats.EventsReceived,
-		"events_published":           r.stats.EventsPublished,
-		"events_debounced":           r.stats.EventsDebounced,
-		"events_rate_limited":        r.stats.EventsRateLimited,
-		"events_errored":             r.stats.EventsErrored,
-		"last_event_time":            r.stats.LastEventTime,
-		"last_config_update_time":    r.stats.LastConfigUpdateTime,
-		"debounce_interval":          r.config.DebounceInterval.String(),
-		"max_events_per_minute":      r.config.MaxEventsPerMinute,
-		"database_poll_interval":     r.config.DatabasePollInterval.String(),
+		"running":                 r.IsRunning(),
+		"enabled":                 r.isEnabled(),
+		"config_enabled":          r.config.Enabled,
+		"database_config_enabled": r.stats.DatabaseConfigEnabled,
+		"events_received":         r.stats.EventsReceived,
+		"events_published":        r.stats.EventsPublished,
+		"events_debounced":        r.stats.EventsDebounced,
+		"events_rate_limited":     r.stats.EventsRateLimited,
+		"events_errored":          r.stats.EventsErrored,
+		"last_event_time":         r.stats.LastEventTime,
+		"last_config_update_time": r.stats.LastConfigUpdateTime,
+		"debounce_interval":       r.config.DebounceInterval.String(),
+		"max_events_per_minute":   r.config.MaxEventsPerMinute,
+		"database_poll_interval":  r.config.DatabasePollInterval.String(),
 	}
 
 	// Add database listener stats if available

@@ -19,11 +19,11 @@ type ReconciliationSchedule struct {
 	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 
 	// Health-aware interval configuration
-	HealthyInterval    string     `json:"healthy_interval" db:"healthy_interval"`       // PostgreSQL INTERVAL as string
-	UnhealthyInterval  string     `json:"unhealthy_interval" db:"unhealthy_interval"`   // PostgreSQL INTERVAL as string
-	AdaptiveEnabled    bool       `json:"adaptive_enabled" db:"adaptive_enabled"`
-	LastHealthCheck    *time.Time `json:"last_health_check" db:"last_health_check"`
-	IsHealthy          *bool      `json:"is_healthy" db:"is_healthy"`                   // NULL = unknown, true = healthy, false = unhealthy
+	HealthyInterval   string     `json:"healthy_interval" db:"healthy_interval"`     // PostgreSQL INTERVAL as string
+	UnhealthyInterval string     `json:"unhealthy_interval" db:"unhealthy_interval"` // PostgreSQL INTERVAL as string
+	AdaptiveEnabled   bool       `json:"adaptive_enabled" db:"adaptive_enabled"`
+	LastHealthCheck   *time.Time `json:"last_health_check" db:"last_health_check"`
+	IsHealthy         *bool      `json:"is_healthy" db:"is_healthy"` // NULL = unknown, true = healthy, false = unhealthy
 }
 
 // ReconciliationTarget represents a cluster that needs reconciliation (fan-out to all controllers)
@@ -78,13 +78,13 @@ func (rc *ReconciliationConfig) Validate() error {
 
 // ReactiveReconciliationConfig represents configuration for reactive reconciliation (database-driven)
 type ReactiveReconciliationConfig struct {
-	ID                   int64         `json:"id" db:"id"`
-	Enabled              bool          `json:"enabled" db:"enabled"`
-	ChangeTypes          []string      `json:"change_types" db:"change_types"`          // ["spec", "status", "controller_status"]
-	DebounceInterval     time.Duration `json:"debounce_interval" db:"debounce_interval"` // Prevent rapid-fire events
-	MaxEventsPerMinute   int           `json:"max_events_per_minute" db:"max_events_per_minute"` // Rate limiting
-	CreatedAt            time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt            time.Time     `json:"updated_at" db:"updated_at"`
+	ID                 int64         `json:"id" db:"id"`
+	Enabled            bool          `json:"enabled" db:"enabled"`
+	ChangeTypes        []string      `json:"change_types" db:"change_types"`                   // ["spec", "status", "controller_status"]
+	DebounceInterval   time.Duration `json:"debounce_interval" db:"debounce_interval"`         // Prevent rapid-fire events
+	MaxEventsPerMinute int           `json:"max_events_per_minute" db:"max_events_per_minute"` // Rate limiting
+	CreatedAt          time.Time     `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time     `json:"updated_at" db:"updated_at"`
 }
 
 // DatabaseChangeNotification represents a change notification from database triggers (fan-out to all controllers)

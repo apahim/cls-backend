@@ -17,11 +17,11 @@ type Health string
 
 // Status constants
 const (
-	StatusPending    Status = "Pending"
-	StatusReady      Status = "Ready"
-	StatusError      Status = "Error"
-	StatusDeleting   Status = "Deleting"
-	StatusUnknown    Status = "Unknown"
+	StatusPending  Status = "Pending"
+	StatusReady    Status = "Ready"
+	StatusError    Status = "Error"
+	StatusDeleting Status = "Deleting"
+	StatusUnknown  Status = "Unknown"
 )
 
 // Health constants
@@ -58,13 +58,13 @@ type ClusterWithObservedGeneration struct {
 
 // ClusterSpec represents the cluster specification
 type ClusterSpec struct {
-	InfraID                  string          `json:"infraID"`
-	Platform                 PlatformSpec    `json:"platform"`
-	Release                  ReleaseSpec     `json:"release"`
-	Networking               NetworkingSpec  `json:"networking"`
-	DNS                      DNSSpec         `json:"dns"`
-	ServiceAccountSigningKey string          `json:"serviceAccountSigningKey,omitempty"` // Base64-encoded PEM private key
-	IssuerURL                string          `json:"issuerURL,omitempty"`                // OIDC issuer URL
+	InfraID                  string         `json:"infraID"`
+	Platform                 PlatformSpec   `json:"platform"`
+	Release                  ReleaseSpec    `json:"release"`
+	Networking               NetworkingSpec `json:"networking"`
+	DNS                      DNSSpec        `json:"dns"`
+	ServiceAccountSigningKey string         `json:"serviceAccountSigningKey,omitempty"` // Base64-encoded PEM private key
+	IssuerURL                string         `json:"issuerURL,omitempty"`                // OIDC issuer URL
 }
 
 // PlatformSpec represents platform-specific configuration
@@ -82,16 +82,16 @@ type GCPSpec struct {
 
 // WorkloadIdentityConfig represents GCP Workload Identity Federation configuration
 type WorkloadIdentityConfig struct {
-	ProjectNumber       string                      `json:"projectNumber"`
-	PoolID              string                      `json:"poolID"`
-	ProviderID          string                      `json:"providerID"`
-	ServiceAccountsRef  *WIFServiceAccountsRef      `json:"serviceAccountsRef,omitempty"`
+	ProjectNumber      string                 `json:"projectNumber"`
+	PoolID             string                 `json:"poolID"`
+	ProviderID         string                 `json:"providerID"`
+	ServiceAccountsRef *WIFServiceAccountsRef `json:"serviceAccountsRef,omitempty"`
 }
 
 // WIFServiceAccountsRef represents GCP service account references for WIF
 type WIFServiceAccountsRef struct {
-	NodePoolEmail      string `json:"nodePoolEmail"`
-	ControlPlaneEmail  string `json:"controlPlaneEmail"`
+	NodePoolEmail     string `json:"nodePoolEmail"`
+	ControlPlaneEmail string `json:"controlPlaneEmail"`
 }
 
 // ReleaseSpec represents the OpenShift release configuration
@@ -116,8 +116,8 @@ type NetworkEntry struct {
 
 // DNSSpec represents DNS configuration
 type DNSSpec struct {
-	BaseDomain string `json:"baseDomain"`
-	PublicZone string `json:"publicZone,omitempty"`
+	BaseDomain  string `json:"baseDomain"`
+	PublicZone  string `json:"publicZone,omitempty"`
 	PrivateZone string `json:"privateZone,omitempty"`
 }
 
@@ -125,29 +125,29 @@ type DNSSpec struct {
 type ClusterStatusInfo struct {
 	ObservedGeneration int64       `json:"observedGeneration"`
 	Conditions         []Condition `json:"conditions"`
-	Phase              string      `json:"phase,omitempty"`    // Current lifecycle phase
-	Message            string      `json:"message,omitempty"`  // Human-readable status message
-	Reason             string      `json:"reason,omitempty"`   // Machine-readable reason
+	Phase              string      `json:"phase,omitempty"`   // Current lifecycle phase
+	Message            string      `json:"message,omitempty"` // Human-readable status message
+	Reason             string      `json:"reason,omitempty"`  // Machine-readable reason
 	LastUpdateTime     time.Time   `json:"lastUpdateTime"`
 }
 
 // ClusterStatus represents the overall cluster status (DEPRECATED - use ClusterStatusInfo)
 type ClusterStatus struct {
-	Phase                string                          `json:"phase"`
-	Health               string                          `json:"health"`
-	Available            bool                            `json:"available"`
-	Conditions           []Condition                     `json:"conditions"`
-	Errors               []ErrorInfo                     `json:"errors"`
-	ControllerStatuses   map[string]ControllerStatus    `json:"controllerStatuses"`
-	Endpoints            *ClusterEndpoints              `json:"endpoints,omitempty"`
-	LastStatusUpdate     *time.Time                     `json:"lastStatusUpdate,omitempty"`
+	Phase              string                      `json:"phase"`
+	Health             string                      `json:"health"`
+	Available          bool                        `json:"available"`
+	Conditions         []Condition                 `json:"conditions"`
+	Errors             []ErrorInfo                 `json:"errors"`
+	ControllerStatuses map[string]ControllerStatus `json:"controllerStatuses"`
+	Endpoints          *ClusterEndpoints           `json:"endpoints,omitempty"`
+	LastStatusUpdate   *time.Time                  `json:"lastStatusUpdate,omitempty"`
 }
 
 // ClusterEndpoints represents cluster access endpoints
 type ClusterEndpoints struct {
-	APIServer    string `json:"apiServer,omitempty"`
-	ConsoleURL   string `json:"consoleURL,omitempty"`
-	KubeConfig   string `json:"kubeConfig,omitempty"`
+	APIServer  string `json:"apiServer,omitempty"`
+	ConsoleURL string `json:"consoleURL,omitempty"`
+	KubeConfig string `json:"kubeConfig,omitempty"`
 }
 
 // Condition represents a status condition
@@ -174,7 +174,7 @@ const (
 // ErrorInfo represents error information
 type ErrorInfo struct {
 	ControllerName string            `json:"controllerName"`
-	ErrorType      ErrorType         `json:"errorType"`    // Transient, Configuration, Fatal, System
+	ErrorType      ErrorType         `json:"errorType"` // Transient, Configuration, Fatal, System
 	ErrorCode      string            `json:"errorCode"`
 	Message        string            `json:"message"`
 	UserActionable bool              `json:"userActionable"`
@@ -266,10 +266,10 @@ func (csi *ClusterStatusInfo) ToJSON() ([]byte, error) {
 
 // ClusterListRequest represents a request to list clusters
 type ClusterListRequest struct {
-	Labels    map[string]string `form:"-"`
-	Status    string            `form:"status"`
-	Limit     int               `form:"limit"`
-	Offset    int               `form:"offset"`
+	Labels map[string]string `form:"-"`
+	Status string            `form:"status"`
+	Limit  int               `form:"limit"`
+	Offset int               `form:"offset"`
 }
 
 // ClusterCreateRequest represents a request to create a cluster
@@ -337,7 +337,6 @@ type UserClusterPermissions struct {
 	CanDelete bool   `json:"can_delete"`
 	Role      string `json:"role"`
 }
-
 
 // BuildStatusFromAggregation creates a Kubernetes-like status from aggregation data
 func (c *Cluster) BuildStatusFromAggregation(observedGeneration int64, readyCount, totalCount int, hasErrors bool) {

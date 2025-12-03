@@ -10,43 +10,43 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	Server        ServerConfig
-	Database      DatabaseConfig
-	PubSub        PubSubConfig
-	Logging       LoggingConfig
-	Auth          AuthConfig
+	Server         ServerConfig
+	Database       DatabaseConfig
+	PubSub         PubSubConfig
+	Logging        LoggingConfig
+	Auth           AuthConfig
 	Reconciliation ReconciliationConfig
-	Aggregation   AggregationConfig
-	Metrics       MetricsConfig
+	Aggregation    AggregationConfig
+	Metrics        MetricsConfig
 }
 
 // ReconciliationConfig holds reconciliation scheduler configuration
 type ReconciliationConfig struct {
-	Enabled                      bool          `mapstructure:"enabled"`
-	CheckInterval                time.Duration `mapstructure:"check_interval"`
-	MaxConcurrent                int           `mapstructure:"max_concurrent"`
+	Enabled       bool          `mapstructure:"enabled"`
+	CheckInterval time.Duration `mapstructure:"check_interval"`
+	MaxConcurrent int           `mapstructure:"max_concurrent"`
 
 	// Health-aware interval configuration
-	AdaptiveEnabled              bool          `mapstructure:"adaptive_enabled"`
-	HealthyInterval              time.Duration `mapstructure:"healthy_interval"`
-	UnhealthyInterval            time.Duration `mapstructure:"unhealthy_interval"`
-	DefaultInterval              time.Duration `mapstructure:"default_interval"`
+	AdaptiveEnabled   bool          `mapstructure:"adaptive_enabled"`
+	HealthyInterval   time.Duration `mapstructure:"healthy_interval"`
+	UnhealthyInterval time.Duration `mapstructure:"unhealthy_interval"`
+	DefaultInterval   time.Duration `mapstructure:"default_interval"`
 
 	// Reactive reconciliation
-	ReactiveEnabled              bool          `mapstructure:"reactive_enabled"`
-	ReactiveDebounce             time.Duration `mapstructure:"reactive_debounce"`
-	ReactiveMaxEventsPerMinute   int           `mapstructure:"reactive_max_events_per_minute"`
+	ReactiveEnabled            bool          `mapstructure:"reactive_enabled"`
+	ReactiveDebounce           time.Duration `mapstructure:"reactive_debounce"`
+	ReactiveMaxEventsPerMinute int           `mapstructure:"reactive_max_events_per_minute"`
 }
 
 // AggregationConfig holds status aggregation configuration
 type AggregationConfig struct {
-	Enabled              bool          `mapstructure:"enabled"`
-	Interval             time.Duration `mapstructure:"interval"`
-	BatchSize            int           `mapstructure:"batch_size"`
-	MaxConcurrency       int           `mapstructure:"max_concurrency"`
-	RetryAttempts        int           `mapstructure:"retry_attempts"`
-	RetryBackoff         time.Duration `mapstructure:"retry_backoff"`
-	HealthCheckInterval  time.Duration `mapstructure:"health_check_interval"`
+	Enabled             bool          `mapstructure:"enabled"`
+	Interval            time.Duration `mapstructure:"interval"`
+	BatchSize           int           `mapstructure:"batch_size"`
+	MaxConcurrency      int           `mapstructure:"max_concurrency"`
+	RetryAttempts       int           `mapstructure:"retry_attempts"`
+	RetryBackoff        time.Duration `mapstructure:"retry_backoff"`
+	HealthCheckInterval time.Duration `mapstructure:"health_check_interval"`
 }
 
 // MetricsConfig holds metrics server configuration
@@ -57,13 +57,13 @@ type MetricsConfig struct {
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Port                 int           `mapstructure:"port"`
-	Environment          string        `mapstructure:"environment"`
-	ReadTimeoutSeconds   int           `mapstructure:"read_timeout_seconds"`
-	WriteTimeoutSeconds  int           `mapstructure:"write_timeout_seconds"`
-	IdleTimeoutSeconds   int           `mapstructure:"idle_timeout_seconds"`
-	MaxHeaderBytes       int           `mapstructure:"max_header_bytes"`
-	CorsAllowedOrigins   []string      `mapstructure:"cors_allowed_origins"`
+	Port                int      `mapstructure:"port"`
+	Environment         string   `mapstructure:"environment"`
+	ReadTimeoutSeconds  int      `mapstructure:"read_timeout_seconds"`
+	WriteTimeoutSeconds int      `mapstructure:"write_timeout_seconds"`
+	IdleTimeoutSeconds  int      `mapstructure:"idle_timeout_seconds"`
+	MaxHeaderBytes      int      `mapstructure:"max_header_bytes"`
+	CorsAllowedOrigins  []string `mapstructure:"cors_allowed_origins"`
 }
 
 // DatabaseConfig holds database connection configuration
@@ -77,12 +77,12 @@ type DatabaseConfig struct {
 
 // PubSubConfig holds Cloud Pub/Sub configuration (simplified for fan-out architecture)
 type PubSubConfig struct {
-	ProjectID                  string `mapstructure:"project_id"`
-	ClusterEventsTopic         string `mapstructure:"cluster_events_topic"`
-	EmulatorHost               string `mapstructure:"emulator_host"`
-	CredentialsFile            string `mapstructure:"credentials_file"`
-	MaxConcurrentHandlers      int    `mapstructure:"max_concurrent_handlers"`
-	MaxOutstandingMessages     int    `mapstructure:"max_outstanding_messages"`
+	ProjectID              string `mapstructure:"project_id"`
+	ClusterEventsTopic     string `mapstructure:"cluster_events_topic"`
+	EmulatorHost           string `mapstructure:"emulator_host"`
+	CredentialsFile        string `mapstructure:"credentials_file"`
+	MaxConcurrentHandlers  int    `mapstructure:"max_concurrent_handlers"`
+	MaxOutstandingMessages int    `mapstructure:"max_outstanding_messages"`
 }
 
 // LoggingConfig holds logging configuration
@@ -95,7 +95,6 @@ type LoggingConfig struct {
 type AuthConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 }
-
 
 // Load loads configuration from environment variables with defaults
 func Load() (*Config, error) {
@@ -132,15 +131,15 @@ func Load() (*Config, error) {
 			Enabled: !getBoolEnv("DISABLE_AUTH", false),
 		},
 		Reconciliation: ReconciliationConfig{
-			Enabled:                    getBoolEnv("RECONCILIATION_ENABLED", true),
-			CheckInterval:              getDurationEnv("RECONCILIATION_CHECK_INTERVAL", 1*time.Minute),
-			MaxConcurrent:              getIntEnv("RECONCILIATION_MAX_CONCURRENT", 50),
+			Enabled:       getBoolEnv("RECONCILIATION_ENABLED", true),
+			CheckInterval: getDurationEnv("RECONCILIATION_CHECK_INTERVAL", 1*time.Minute),
+			MaxConcurrent: getIntEnv("RECONCILIATION_MAX_CONCURRENT", 50),
 
 			// Health-aware configuration
-			AdaptiveEnabled:            getBoolEnv("RECONCILIATION_ADAPTIVE_ENABLED", true),
-			HealthyInterval:            getDurationEnv("RECONCILIATION_HEALTHY_INTERVAL", 5*time.Minute),
-			UnhealthyInterval:          getDurationEnv("RECONCILIATION_UNHEALTHY_INTERVAL", 30*time.Second),
-			DefaultInterval:            getDurationEnv("RECONCILIATION_DEFAULT_INTERVAL", 5*time.Minute),
+			AdaptiveEnabled:   getBoolEnv("RECONCILIATION_ADAPTIVE_ENABLED", true),
+			HealthyInterval:   getDurationEnv("RECONCILIATION_HEALTHY_INTERVAL", 5*time.Minute),
+			UnhealthyInterval: getDurationEnv("RECONCILIATION_UNHEALTHY_INTERVAL", 30*time.Second),
+			DefaultInterval:   getDurationEnv("RECONCILIATION_DEFAULT_INTERVAL", 5*time.Minute),
 
 			// Reactive reconciliation
 			ReactiveEnabled:            getBoolEnv("REACTIVE_RECONCILIATION_ENABLED", false),
@@ -178,7 +177,6 @@ func (c *Config) Validate() error {
 	if c.PubSub.ProjectID == "" {
 		return fmt.Errorf("GOOGLE_CLOUD_PROJECT is required")
 	}
-
 
 	return nil
 }

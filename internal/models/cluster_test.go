@@ -29,13 +29,13 @@ func TestCluster(t *testing.T) {
 			},
 		},
 		Status: &ClusterStatusInfo{
-			Phase: "Pending",
-			Conditions: []Condition{},
+			Phase:              "Pending",
+			Conditions:         []Condition{},
 			ObservedGeneration: 1,
-			LastUpdateTime: time.Now(),
+			LastUpdateTime:     time.Now(),
 		},
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	// Test that the cluster has all required fields
@@ -272,8 +272,8 @@ func TestNodePool(t *testing.T) {
 			},
 			Replicas: func() *int32 { i := int32(3); return &i }(),
 		},
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	utils.AssertNotEqual(t, uuid.Nil, nodepool.ID, "NodePool ID should not be nil")

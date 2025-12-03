@@ -433,8 +433,8 @@ func (h *ClusterHandler) GetClusterStatus(c *gin.Context) {
 	)
 
 	response := gin.H{
-		"cluster_id":         clusterIDStr,
-		"status":            cluster.Status,      // K8s-like aggregated status
+		"cluster_id":        clusterIDStr,
+		"status":            cluster.Status,     // K8s-like aggregated status
 		"controller_status": controllerStatuses, // Individual controller reports
 	}
 

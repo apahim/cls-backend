@@ -100,7 +100,6 @@ func (s *Service) GetPublisher() *Publisher {
 	return s.publisher
 }
 
-
 // GetClient returns the Pub/Sub client
 func (s *Service) GetClient() *Client {
 	return s.client

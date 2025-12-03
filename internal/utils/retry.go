@@ -188,9 +188,9 @@ func IsTemporaryError(err error) bool {
 // contains checks if a string contains a substring (case-insensitive)
 func contains(str, substr string) bool {
 	return len(str) >= len(substr) &&
-		   (str == substr ||
-		    (len(str) > len(substr) &&
-		     findSubstring(str, substr)))
+		(str == substr ||
+			(len(str) > len(substr) &&
+				findSubstring(str, substr)))
 }
 
 func findSubstring(str, substr string) bool {
