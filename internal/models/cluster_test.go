@@ -22,6 +22,8 @@ func TestCluster(t *testing.T) {
 				GCP: &GCPSpec{
 					ProjectID: "test-project",
 					Region:    "us-central1",
+					Network:   "test-network",
+					Subnet:    "test-subnet",
 				},
 			},
 			Release: ReleaseSpec{
@@ -61,6 +63,8 @@ func TestClusterSpec_Value(t *testing.T) {
 			GCP: &GCPSpec{
 				ProjectID: "test-project",
 				Region:    "us-central1",
+				Network:   "test-network",
+				Subnet:    "test-subnet",
 			},
 		},
 		Release: ReleaseSpec{
@@ -98,6 +102,8 @@ func TestClusterSpec_Scan(t *testing.T) {
 			GCP: &GCPSpec{
 				ProjectID: "test-project",
 				Region:    "us-central1",
+				Network:   "test-network",
+				Subnet:    "test-subnet",
 			},
 		},
 	}
