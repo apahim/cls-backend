@@ -5,7 +5,7 @@ IMAGE_TAG ?= latest
 FULL_IMAGE_NAME = gcr.io/$(PROJECT_ID)/$(IMAGE_NAME):$(IMAGE_TAG)
 
 # Go variables
-GO_VERSION = 1.21
+GO_VERSION = 1.23
 MAIN_PACKAGE = ./cmd/backend-api
 BINARY_NAME = backend-api
 
@@ -62,7 +62,7 @@ build-all:
 .PHONY: test
 test:
 	@echo "Running comprehensive test suite..."
-	@./scripts/run-tests.sh
+	@go test -v -race ./...
 
 # Run unit tests only (no external dependencies)
 .PHONY: test-unit
@@ -105,19 +105,19 @@ test-package:
 		exit 1; \
 	fi
 	@echo "Running tests for package: $(PKG)"
-	@./scripts/run-tests.sh --package $(PKG)
+	@go test -v -race $(PKG)
 
 # Run tests without race detector (faster)
 .PHONY: test-fast
 test-fast:
 	@echo "Running tests without race detector..."
-	@./scripts/run-tests.sh --no-race
+	@go test -v ./...
 
 # Run tests without database (CI environments)
 .PHONY: test-no-db
 test-no-db:
 	@echo "Running tests without database dependencies..."
-	@SKIP_DB_TESTS=true ./scripts/run-tests.sh
+	@SKIP_DB_TESTS=true go test -v ./...
 
 # Run benchmarks
 .PHONY: benchmark

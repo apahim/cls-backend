@@ -19,7 +19,7 @@ This file contains context for Claude Code sessions working on the cls-backend r
 ### Key Discoveries
 
 1. **Missing Entry Point**: Repository lacked `cmd/backend-api/main.go` which was required by Makefile
-2. **Dependencies**: Uses Go 1.21, Gin framework, PostgreSQL, Google Cloud Pub/Sub, Zap logging
+2. **Dependencies**: Uses Go 1.23, Gin framework, PostgreSQL, Google Cloud Pub/Sub, Zap logging
 3. **Architecture**: Clean separation with internal packages for api, database, pubsub, config, etc.
 
 ### Files Created/Modified
@@ -58,7 +58,7 @@ cls-backend/
 │   └── DEPLOYMENT_GUIDE.md     # [CREATED] Complete deployment guide
 ├── Dockerfile                  # Multi-stage Go build
 ├── Makefile                    # Build automation with GCR support
-└── go.mod                      # Go 1.21 with Cloud Pub/Sub, Gin, PostgreSQL
+└── go.mod                      # Go 1.23 with Cloud Pub/Sub, Gin, PostgreSQL
 ```
 
 ## Deployment Architecture
@@ -271,7 +271,7 @@ kubectl logs -f deployment/cls-backend -n cls-system
 
 **Key Changes Made:**
 
-1. **Database Migration (001_complete_schema.sql)**:
+1. **Database Migration (001_final_schema.sql + 002_add_status_dirty_trigger.sql)**:
    - Added `status JSONB` column to clusters table
    - Enhanced `aggregate_cluster_status()` function to build K8s conditions
    - Automatic Ready/Available condition generation based on controller status
@@ -391,7 +391,7 @@ Controllers now use **preConditions** to determine if they should act on events:
 
 ### **Code Changes Summary:**
 
-1. **Database Migration**: Consolidated into `001_complete_schema.sql` (single file)
+1. **Database Migration**: Base schema in `001_final_schema.sql` plus subsequent migrations
 2. **Models Updated**: Removed `ControllerType` fields from all reconciliation models
 3. **Repository Layer**: All methods now cluster-centric (no controller type parameters)
 4. **Reactive Reconciliation**: Single event per cluster change
@@ -527,7 +527,7 @@ REGISTRY_AUTH_FILE=/Users/asegundo/.config/containers/auth.json \
 
 **Actual Migration System (Unchanged):**
 - **Kubernetes Jobs**: `deploy/kubernetes/migration-job.yaml` handles real migrations
-- **Real Files**: Uses consolidated schema file `001_complete_schema.sql`
+- **Real Files**: Uses `001_final_schema.sql`, `002_add_status_dirty_trigger.sql`, `003_fix_reconciliation_intervals.sql`
 - **Production Safe**: No impact on deployed systems
 
 **Core Database Client Functionality Preserved:**
@@ -541,26 +541,24 @@ REGISTRY_AUTH_FILE=/Users/asegundo/.config/containers/auth.json \
 - ✅ **Container Build**: Multi-stage Dockerfile build - SUCCESS
 - ✅ **GCR Push**: `gcr.io/apahim-dev-1/cls-backend:cleaned-migrations-20251013-181500` - SUCCESS
 
-## ✅ Database Migration Consolidation Complete (2025-10-13)
+## ✅ Database Migration Structure (Current State)
 
-**Single Migration File Created:**
-- ✅ **Consolidated All Migrations**: Merged 4 separate migration files into single `001_complete_schema.sql`
-- ✅ **Complete Final State**: Includes all features from original 001-004 migrations in final form
-- ✅ **Fan-Out Architecture**: Cluster-centric reconciliation with no controller type dependencies
-- ✅ **Reactive Reconciliation**: Full reactive trigger system included
-- ✅ **Organization Multi-Tenancy**: All organization features and functions included
+**Migration Files:**
+- ✅ **001_final_schema.sql**: Base schema with all core tables, indexes, and initial functions
+- ✅ **002_add_status_dirty_trigger.sql**: Adds status dirty flag and trigger system for cache invalidation
+- ✅ **003_fix_reconciliation_intervals.sql**: Health-aware reconciliation scheduling logic
 
-**Migration Consolidation Details:**
-- **Original Files Removed**: `002_reactive_reconciliation_triggers.sql`, `003_remove_controller_type_validation.sql`, `004_full_fan_out_architecture.sql`
-- **Final Schema**: Complete database schema with all transformations applied
-- **Clean Deployment**: New deployments will use single migration file for complete setup
-- **No Data Migration Needed**: For fresh deployments from scratch
+**Migration Architecture:**
+- **Sequential Migrations**: Three migration files applied in order for complete schema
+- **Complete Feature Set**: Fan-out architecture, reactive reconciliation, status aggregation
+- **Clean Deployment**: New deployments apply all three migrations sequentially
+- **Production Tested**: Verified in deployed environments
 
-**Benefits Achieved:**
-✅ **Simplified Deployment**: Single migration file for fresh installations
-✅ **Reduced Complexity**: No sequential migration dependencies to manage
-✅ **Final State Schema**: Represents the ultimate evolved database structure
-✅ **Documentation Updated**: All references to multiple migrations updated
+**Benefits:**
+✅ **Incremental Updates**: Each migration adds specific functionality
+✅ **Clear History**: Migration history shows evolution of schema
+✅ **Maintainable**: Easy to understand what each migration does
+✅ **Rollback Support**: Can rollback individual feature sets if needed
 
 ## ✅ Reconciliation System Simplification Complete (2025-10-14)
 
