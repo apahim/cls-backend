@@ -42,41 +42,30 @@ service:
   port: 80
   targetPort: 8080
 
-# External LoadBalancer service is always created for API Gateway integration
-
-# External DNS configuration (enabled by default, but only active when hostname is set)
-# IMPORTANT: Set externalDns.hostname to your desired DNS name for automatic DNS record creation
-externalDns:
-  # Enable external-dns integration for automatic DNS record creation
-  # NOTE: External DNS annotations are only added when both enabled=true AND hostname is provided
-  enabled: true
-  # DNS hostname for the service (leave empty to disable external-dns, or set to your desired DNS name)
-  # Example: cls-backend.example.com, api.mycompany.com
-  hostname: ""
-  # DNS zone (optional, used for validation)
-  zone: ""
-  # TTL for DNS records in seconds (default: 300)
-  ttl: 300
-  # Additional annotations to pass to external-dns
-  annotations: {}
-    # external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
-    # external-dns.alpha.kubernetes.io/aws-health-check-id: "health-check-id"
-
-# TLS/SSL configuration for HTTPS support
-tls:
-  # Enable TLS/HTTPS support (adds port 443 to LoadBalancer)
+# Ingress configuration for external access
+ingress:
   enabled: false
-  # GCP Managed Certificate configuration (automatic certificate provisioning)
+  className: "gce"
+  annotations: {}
+    # kubernetes.io/ingress.global-static-ip-name: "cls-backend-ip"
+    # cloud.google.com/armor-config: "my-security-policy"
+    # cloud.google.com/backend-timeout: "300"
+    # external-dns.alpha.kubernetes.io/hostname: "cls-backend.example.com"
+    # external-dns.alpha.kubernetes.io/ttl: "300"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: cls-backend-tls
+  #    hosts:
+  #      - chart-example.local
+  # GCP Managed Certificate configuration (GKE-specific feature)
+  # When enabled, creates a ManagedCertificate resource for automatic TLS provisioning
+  # NOTE: Certificate provisioning can take 10-20 minutes after initial deployment
   managedCertificate:
-    # Enable GCP ManagedCertificate for automatic TLS certificate provisioning
-    # IMPORTANT: Requires externalDns.hostname to be set
-    # NOTE: Certificate provisioning can take 10-20 minutes after initial deployment
     enabled: false
-    # Additional domains to include in the certificate (optional)
-    # The primary domain from externalDns.hostname is automatically included
-    additionalDomains: []
-      # - api.example.com
-      # - backend.example.com
 
 # Database configuration (auto-discovered from cloud-resources chart)
 database:
