@@ -62,6 +62,22 @@ externalDns:
     # external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
     # external-dns.alpha.kubernetes.io/aws-health-check-id: "health-check-id"
 
+# TLS/SSL configuration for HTTPS support
+tls:
+  # Enable TLS/HTTPS support (adds port 443 to LoadBalancer)
+  enabled: false
+  # GCP Managed Certificate configuration (automatic certificate provisioning)
+  managedCertificate:
+    # Enable GCP ManagedCertificate for automatic TLS certificate provisioning
+    # IMPORTANT: Requires externalDns.hostname to be set
+    # NOTE: Certificate provisioning can take 10-20 minutes after initial deployment
+    enabled: false
+    # Additional domains to include in the certificate (optional)
+    # The primary domain from externalDns.hostname is automatically included
+    additionalDomains: []
+      # - api.example.com
+      # - backend.example.com
+
 # Database configuration (auto-discovered from cloud-resources chart)
 database:
   # Database connection type: "cloud-sql" or "external"

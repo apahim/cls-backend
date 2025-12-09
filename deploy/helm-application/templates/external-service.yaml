@@ -11,6 +11,10 @@ metadata:
     networking.gke.io/load-balancer-type: "External"
     # Preserve source IP for better logging/debugging
     service.beta.kubernetes.io/external-traffic: OnlyLocal
+    {{- if and .Values.tls.enabled .Values.tls.managedCertificate.enabled }}
+    # GCP Managed Certificate for automatic TLS provisioning
+    networking.gke.io/managed-certificates: {{ include "cls-backend-application.fullname" . }}-cert
+    {{- end }}
     {{- if and .Values.externalDns.enabled .Values.externalDns.hostname }}
     # External DNS annotations
     external-dns.alpha.kubernetes.io/hostname: {{ .Values.externalDns.hostname | quote }}
@@ -31,5 +35,11 @@ spec:
     port: 80
     targetPort: 8080
     protocol: TCP
+  {{- if .Values.tls.enabled }}
+  - name: https
+    port: 443
+    targetPort: 8080
+    protocol: TCP
+  {{- end }}
   selector:
     {{- include "cls-backend-application.selectorLabels" . | nindent 4 }}
