@@ -1,3 +1,24 @@
+{{- if and .Values.tls.enabled .Values.tls.managedCertificate.enabled }}
+# GCP Managed Certificate for automatic TLS certificate provisioning
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: {{ include "cls-backend-application.fullname" . }}-cert
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "cls-backend-application.labels" . | nindent 4 }}
+    app.kubernetes.io/component: certificate
+spec:
+  domains:
+  {{- if .Values.externalDns.hostname }}
+    - {{ .Values.externalDns.hostname }}
+  {{- end }}
+  {{- range .Values.tls.managedCertificate.additionalDomains }}
+    - {{ . }}
+  {{- end }}
+---
+{{- end }}
+# External LoadBalancer Service for HTTPS/TLS support
 apiVersion: v1
 kind: Service
 metadata:
