@@ -273,7 +273,7 @@ func (r *NodePoolsRepository) List(ctx context.Context, createdBy string, opts *
 	var args []interface{}
 	args = append(args, createdBy)
 	var conditions []string
-	argIndex := 2  // Start at 2 because $1 is createdBy
+	argIndex := 2 // Start at 2 because $1 is createdBy
 
 	// Note: Status and Health filters removed - use status.phase instead if needed
 
