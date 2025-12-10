@@ -45,7 +45,7 @@ service:
 # Ingress configuration for external access
 ingress:
   enabled: false
-  className: "gce"
+  className: ""  # Leave empty to use default GKE Ingress controller
   annotations: {}
     # kubernetes.io/ingress.global-static-ip-name: "cls-backend-ip"
     # cloud.google.com/armor-config: "my-security-policy"
