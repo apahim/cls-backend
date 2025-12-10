@@ -1,6 +1,6 @@
 # Variables
 PROJECT_ID ?= your-project-id
-INAGE_REGISTRY = ?= gcr.io
+IMAGE_REGISTRY ?= gcr.io
 IMAGE_NAME ?= cls-backend
 IMAGE_TAG ?= latest
 FULL_IMAGE_NAME = $(IMAGE_REGISTRY)/$(PROJECT_ID)/$(IMAGE_NAME):$(IMAGE_TAG)
