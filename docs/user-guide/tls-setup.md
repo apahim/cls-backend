@@ -1,55 +1,57 @@
 # TLS/HTTPS Setup Guide
 
-This guide explains how to configure TLS/HTTPS support for the CLS Backend using GCP Managed Certificates.
+This guide explains how to configure TLS/HTTPS support for the CLS Backend using GCP Managed Certificates with GKE Ingress.
 
 ## Overview
 
-The CLS Backend supports automatic TLS certificate provisioning using GCP's ManagedCertificate resource. This provides:
+The CLS Backend supports automatic TLS certificate provisioning using GCP's ManagedCertificate resource with GKE Ingress. This provides:
 
 - **Automatic certificate provisioning** - No manual certificate management
 - **Automatic renewal** - Certificates are renewed automatically before expiration
 - **Free SSL certificates** - No additional cost for certificates
-- **Integration with GKE LoadBalancer** - Seamless HTTPS termination
+- **Integration with GKE Ingress** - Seamless HTTPS termination at the Load Balancer
 
 ## Prerequisites
 
-1. **Domain name configured** - You must have a domain name that points to your LoadBalancer
-2. **External DNS** - Recommended to use External DNS for automatic DNS record creation
-3. **GKE cluster** - Running on Google Kubernetes Engine
-4. **Patience** - Certificate provisioning takes 10-20 minutes after initial deployment
+1. **Domain name** - You need a domain name for your API
+2. **External DNS** - Recommended for automatic DNS record creation
+3. **GKE cluster** - Must be running on Google Kubernetes Engine
+4. **Patience** - Load Balancer takes 5-10 minutes, certificate takes 10-20 minutes after DNS is configured
 
 ## Configuration Steps
 
-### Step 1: Configure DNS Hostname
+### Step 1: Enable Ingress with ManagedCertificate
 
-First, set your DNS hostname in the values file:
+Configure the Ingress with your domain and enable ManagedCertificate:
 
 ```yaml
 # values.yaml or custom-values.yaml
+ingress:
+  enabled: true
+  className: "gce"  # Required for GKE
+  hosts:
+    - host: "api.yourdomain.com"  # Your domain name
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # GCP Managed Certificate configuration
+  managedCertificate:
+    enabled: true
+
+# External DNS configuration (recommended for automatic DNS)
 externalDns:
   enabled: true
-  hostname: "api.yourdomain.com"  # Your domain name
-  zone: "yourdomain.com"           # Your DNS zone (optional)
+  hostname: "api.yourdomain.com"  # Must match ingress host
   ttl: 300
 ```
 
-### Step 2: Enable TLS
+**Important Notes:**
+- The `className: "gce"` is **required** for GKE Ingress
+- The hostname in `externalDns` must match the host in `ingress.hosts`
+- Do NOT add a `tls:` section to the ingress when using ManagedCertificates
 
-Enable TLS and GCP ManagedCertificate:
-
-```yaml
-# values.yaml or custom-values.yaml
-tls:
-  enabled: true
-  managedCertificate:
-    enabled: true
-    # Optional: Add additional domains to the certificate
-    additionalDomains: []
-      # - api.example.com
-      # - backend.example.com
-```
-
-### Step 3: Deploy or Upgrade
+### Step 2: Deploy or Upgrade
 
 Deploy the Helm chart with the new configuration:
 
@@ -65,9 +67,25 @@ helm upgrade cls-backend ./deploy/helm-application \
   --values custom-values.yaml
 ```
 
+### Step 3: Wait for Load Balancer IP
+
+First, the GKE Ingress controller creates a Load Balancer. This takes **5-10 minutes**:
+
+```bash
+# Watch for IP address to appear
+watch kubectl get ingress -n cls-system
+```
+
+Expected progression:
+```
+NAME            CLASS   HOSTS                    ADDRESS   PORTS     AGE
+cls-backend     gce     api.yourdomain.com                 80, 443   1m   # Creating...
+cls-backend     gce     api.yourdomain.com       34.x.x.x  80, 443   5m   # IP assigned!
+```
+
 ### Step 4: Wait for Certificate Provisioning
 
-GCP will automatically provision the certificate. This process takes **10-20 minutes**.
+After the Ingress has an IP and DNS is configured, GCP provisions the certificate. This takes **10-20 minutes**.
 
 Check certificate status:
 
@@ -76,7 +94,10 @@ Check certificate status:
 kubectl get managedcertificate -n cls-system
 
 # Get detailed certificate status
-kubectl describe managedcertificate cls-backend-application-cert -n cls-system
+kubectl describe managedcertificate <name>-cert -n cls-system
+
+# Check Ingress events for errors
+kubectl describe ingress <name> -n cls-system
 ```
 
 Expected output when ready:
@@ -106,9 +127,9 @@ curl -v https://api.yourdomain.com/api/v1/info
 
 If you're using External DNS, the DNS record will be created automatically:
 
-1. External DNS controller watches the LoadBalancer service
-2. When an external IP is assigned, External DNS creates an A record
-3. The A record points your hostname to the LoadBalancer IP
+1. External DNS controller watches the Ingress resource
+2. When an external IP is assigned to the Ingress, External DNS creates an A record
+3. The A record points your hostname to the Ingress Load Balancer IP
 
 **No manual DNS configuration required!**
 
@@ -116,15 +137,15 @@ If you're using External DNS, the DNS record will be created automatically:
 
 If not using External DNS, manually create a DNS A record:
 
-1. Get the LoadBalancer external IP:
+1. Get the Ingress external IP:
    ```bash
-   kubectl get service cls-backend-application-external -n cls-system
+   kubectl get ingress <name> -n cls-system
    ```
 
 2. Create an A record in your DNS provider:
    - **Type**: A
    - **Name**: api (or your subdomain)
-   - **Value**: LoadBalancer external IP (e.g., 35.222.86.208)
+   - **Value**: Ingress ADDRESS (e.g., 34.117.197.222)
    - **TTL**: 300 (or as desired)
 
 ## Certificate Status
@@ -156,17 +177,21 @@ Status:
 ```
 
 **Common causes:**
-1. DNS not configured correctly
-2. DNS propagation not complete (wait 5-10 minutes)
-3. Domain doesn't point to the LoadBalancer IP
+1. Ingress doesn't have an IP yet (Load Balancer still creating)
+2. DNS not configured correctly
+3. DNS propagation not complete (wait 5-10 minutes)
+4. Domain doesn't point to the Ingress IP
 
 **How to fix:**
 ```bash
+# Check Ingress has an IP
+kubectl get ingress -n cls-system
+
 # Verify DNS resolution
 nslookup api.yourdomain.com
 
-# Verify it points to LoadBalancer IP
-kubectl get service cls-backend-application-external -n cls-system
+# Verify DNS points to Ingress IP
+dig api.yourdomain.com
 ```
 
 ### Status: Active
@@ -184,7 +209,7 @@ Status:
 
 ## Complete Example Configuration
 
-Here's a complete example for enabling TLS:
+Here's a complete example for enabling TLS with Ingress:
 
 ```yaml
 # custom-values.yaml
@@ -194,21 +219,26 @@ gcp:
   project: "my-gcp-project"
   region: "us-central1"
 
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: "gce"  # Required for GKE
+  hosts:
+    - host: "api.mycompany.com"
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # GCP Managed Certificate
+  managedCertificate:
+    enabled: true
+
 # External DNS Configuration
 externalDns:
   enabled: true
-  hostname: "api.mycompany.com"
+  hostname: "api.mycompany.com"  # Must match ingress host
   zone: "mycompany.com"
   ttl: 300
-
-# TLS Configuration
-tls:
-  enabled: true
-  managedCertificate:
-    enabled: true
-    # Additional domains (optional)
-    additionalDomains:
-      - api-v2.mycompany.com
 
 # Other configurations...
 ```
@@ -222,18 +252,45 @@ helm upgrade --install cls-backend ./deploy/helm-application \
   --wait
 ```
 
-## Service Ports
+## Ingress Ports
 
-When TLS is enabled, the LoadBalancer service exposes:
+When ManagedCertificate is enabled, the Ingress exposes:
 
-| Port | Protocol | Target Port | Purpose |
-|------|----------|-------------|---------|
-| 80   | HTTP     | 8080        | HTTP traffic (can be used for redirects) |
-| 443  | HTTPS    | 8080        | HTTPS traffic (TLS terminated at LoadBalancer) |
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 80   | HTTP     | HTTP traffic (can redirect to HTTPS) |
+| 443  | HTTPS    | HTTPS traffic (TLS terminated at Load Balancer) |
 
-**Note:** TLS termination happens at the GCP LoadBalancer level, so the backend still receives HTTP traffic on port 8080.
+**Note:**
+- TLS termination happens at the GCP Load Balancer (not in the cluster)
+- Traffic from Load Balancer to backend pods is unencrypted HTTP on port 8080
+- The backend service is ClusterIP type, only accessible within the cluster
 
 ## Troubleshooting
+
+### Ingress has no IP address
+
+**Symptoms:** Ingress ADDRESS column is empty after 10+ minutes
+
+**Common causes:**
+1. Missing legacy annotation `kubernetes.io/ingress.class: gce`
+2. Incorrect `ingressClassName` value
+3. Empty secret reference error
+
+**Solution:**
+```bash
+# Check Ingress configuration
+kubectl get ingress <name> -n cls-system -o yaml
+
+# Look for finalizer (proves GKE controller recognized it)
+# Should see: networking.gke.io/ingress-finalizer-V2
+
+# Check for errors in events
+kubectl describe ingress <name> -n cls-system
+
+# Common error: "secret \"\" does not exist"
+# Fix: Ensure NO tls: section when using ManagedCertificates
+```
 
 ### Certificate stuck in "Provisioning" status
 
@@ -241,14 +298,17 @@ When TLS is enabled, the LoadBalancer service exposes:
 
 If still stuck after 20 minutes:
 ```bash
+# First, verify Ingress has an IP
+kubectl get ingress -n cls-system
+
 # Check ManagedCertificate events
-kubectl describe managedcertificate cls-backend-application-cert -n cls-system
+kubectl describe managedcertificate <name>-cert -n cls-system
 
 # Verify DNS is configured correctly
 nslookup api.yourdomain.com
 
-# Check LoadBalancer status
-kubectl describe service cls-backend-application-external -n cls-system
+# Verify DNS points to Ingress IP
+dig api.yourdomain.com
 ```
 
 ### "FailedNotVisible" error
@@ -266,24 +326,51 @@ kubectl describe service cls-backend-application-external -n cls-system
 
 ### Multiple domains on one certificate
 
-Add additional domains to the certificate:
+To add multiple domains, list them in the Ingress hosts and the ManagedCertificate will include all of them:
 
 ```yaml
-tls:
+ingress:
   enabled: true
+  className: "gce"
+  hosts:
+    - host: "api.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: "api-v2.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
   managedCertificate:
     enabled: true
-    additionalDomains:
-      - api.example.com
-      - backend.example.com
-      - api-v2.example.com
 ```
 
-**Note:** All domains must point to the same LoadBalancer IP.
+**Note:** All domains must point to the same Ingress IP.
 
-### Disable HTTP port 80
+### Common GKE Ingress Requirements
 
-If you only want HTTPS traffic, you can modify the service template to remove port 80, but this is **not recommended** as it breaks health checks and makes initial setup harder.
+For GKE Ingress with ManagedCertificates to work, you need:
+
+1. ✅ **Both annotation AND field**:
+   ```yaml
+   annotations:
+     kubernetes.io/ingress.class: gce
+   spec:
+     ingressClassName: gce
+   ```
+
+2. ✅ **ManagedCertificate annotation**:
+   ```yaml
+   annotations:
+     networking.gke.io/managed-certificates: <name>-cert
+   ```
+
+3. ❌ **NO tls: section** when using ManagedCertificates:
+   ```yaml
+   spec:
+     # Don't add this when using ManagedCertificates:
+     # tls: []  # This causes errors!
+   ```
 
 ## Security Considerations
 
@@ -305,4 +392,5 @@ If you only want HTTPS traffic, you can modify the service template to remove po
 
 ---
 
-**Last Updated:** 2025-12-09
+**Last Updated:** 2025-12-10
+**Architecture:** GKE Ingress with ManagedCertificates (not LoadBalancer service)
