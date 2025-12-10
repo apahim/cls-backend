@@ -169,3 +169,42 @@ func (p *Publisher) PublishReconciliationEvent(ctx context.Context, event *model
 
 	return nil
 }
+
+// PublishNodePoolReconciliationEvent publishes a nodepool reconciliation event
+func (p *Publisher) PublishNodePoolReconciliationEvent(ctx context.Context, event *models.NodePoolReconciliationEvent) error {
+	data, err := json.Marshal(event)
+	if err != nil {
+		p.logger.Error("Failed to serialize nodepool reconciliation event",
+			zap.String("nodepool_id", event.NodePoolID),
+			zap.String("reason", event.Reason),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to serialize nodepool reconciliation event: %w", err)
+	}
+
+	// Create attributes for filtering
+	attributes := map[string]string{
+		"event_type":  event.Type,
+		"reason":      event.Reason,
+		"cluster_id":  event.ClusterID,
+		"nodepool_id": event.NodePoolID,
+	}
+
+	err = p.client.Publish(ctx, p.config.NodePoolEventsTopic, data, attributes)
+	if err != nil {
+		p.logger.Error("Failed to publish nodepool reconciliation event",
+			zap.String("nodepool_id", event.NodePoolID),
+			zap.String("reason", event.Reason),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to publish nodepool reconciliation event: %w", err)
+	}
+
+	p.logger.Debug("NodePool reconciliation event published successfully",
+		zap.String("nodepool_id", event.NodePoolID),
+		zap.String("cluster_id", event.ClusterID),
+		zap.String("reason", event.Reason),
+	)
+
+	return nil
+}

@@ -138,12 +138,13 @@ func (s *Scheduler) reconciliationLoop(ctx context.Context) {
 	}
 }
 
-// checkAndScheduleReconciliation finds clusters needing reconciliation and publishes events
+// checkAndScheduleReconciliation finds clusters and nodepools needing reconciliation and publishes events
 func (s *Scheduler) checkAndScheduleReconciliation(ctx context.Context) {
 	start := time.Now()
-	s.logger.Debug("Starting reconciliation check")
+	s.logger.Debug("Starting reconciliation check (clusters + nodepools)")
 
-	var publishedEvents int
+	var clusterPublishedEvents int
+	var nodepoolPublishedEvents int
 	var errors int
 
 	// No complex health status updates needed with simplified binary model
@@ -152,43 +153,73 @@ func (s *Scheduler) checkAndScheduleReconciliation(ctx context.Context) {
 	allTargets, err := s.repository.Reconciliation.FindClustersNeedingReconciliation(ctx)
 	if err != nil {
 		s.logger.Error("Failed to find clusters needing reconciliation", zap.Error(err))
-		return
-	}
+	} else {
+		// Group targets by cluster ID to avoid duplicate events
+		clusterTargets := make(map[uuid.UUID]*models.ReconciliationTarget)
+		for _, target := range allTargets {
+			// Keep the most recent or highest priority target per cluster
+			if existing, exists := clusterTargets[target.ClusterID]; !exists || target.ClusterGeneration > existing.ClusterGeneration {
+				clusterTargets[target.ClusterID] = target
+			}
+		}
 
-	// Group targets by cluster ID to avoid duplicate events
-	clusterTargets := make(map[uuid.UUID]*models.ReconciliationTarget)
-	for _, target := range allTargets {
-		// Keep the most recent or highest priority target per cluster
-		if existing, exists := clusterTargets[target.ClusterID]; !exists || target.ClusterGeneration > existing.ClusterGeneration {
-			clusterTargets[target.ClusterID] = target
+		// Apply global concurrency limit for clusters
+		processed := 0
+		for _, target := range clusterTargets {
+			if processed >= s.config.MaxConcurrent {
+				s.logger.Debug("Reached max concurrent cluster reconciliations",
+					zap.Int("max", s.config.MaxConcurrent),
+					zap.Int("remaining", len(clusterTargets)-processed))
+				break
+			}
+
+			if s.publishReconciliationEvent(ctx, target) {
+				clusterPublishedEvents++
+			} else {
+				errors++
+			}
+			processed++
 		}
 	}
 
-	totalTargets := len(clusterTargets)
-
-	// Apply global concurrency limit
-	processed := 0
-	for _, target := range clusterTargets {
-		if processed >= s.config.MaxConcurrent {
-			s.logger.Debug("Reached max concurrent reconciliations",
-				zap.Int("max", s.config.MaxConcurrent),
-				zap.Int("remaining", totalTargets-processed))
-			break
+	// Get all nodepools needing reconciliation
+	nodepoolTargets, err := s.repository.Reconciliation.FindNodePoolsNeedingReconciliation(ctx)
+	if err != nil {
+		s.logger.Error("Failed to find nodepools needing reconciliation", zap.Error(err))
+	} else {
+		// Group targets by nodepool ID to avoid duplicate events
+		nodepoolMap := make(map[uuid.UUID]*models.NodePoolReconciliationTarget)
+		for _, target := range nodepoolTargets {
+			// Keep the most recent or highest priority target per nodepool
+			if existing, exists := nodepoolMap[target.NodePoolID]; !exists || target.NodePoolGeneration > existing.NodePoolGeneration {
+				nodepoolMap[target.NodePoolID] = target
+			}
 		}
 
-		if s.publishReconciliationEvent(ctx, target) {
-			publishedEvents++
-		} else {
-			errors++
+		// Apply global concurrency limit for nodepools
+		processed := 0
+		for _, target := range nodepoolMap {
+			if processed >= s.config.MaxConcurrent {
+				s.logger.Debug("Reached max concurrent nodepool reconciliations",
+					zap.Int("max", s.config.MaxConcurrent),
+					zap.Int("remaining", len(nodepoolMap)-processed))
+				break
+			}
+
+			if s.publishNodePoolReconciliationEvent(ctx, target) {
+				nodepoolPublishedEvents++
+			} else {
+				errors++
+			}
+			processed++
 		}
-		processed++
 	}
 
 	duration := time.Since(start)
 	s.logger.Info("Reconciliation check completed",
 		zap.Duration("duration", duration),
-		zap.Int("total_targets", totalTargets),
-		zap.Int("published_events", publishedEvents),
+		zap.Int("cluster_events", clusterPublishedEvents),
+		zap.Int("nodepool_events", nodepoolPublishedEvents),
 		zap.Int("errors", errors))
 }
 
@@ -225,6 +256,55 @@ func (s *Scheduler) publishReconciliationEvent(ctx context.Context, target *mode
 
 	s.logger.Debug("Published reconciliation event",
 		zap.String("cluster_id", target.ClusterID.String()),
+		zap.String("reason", target.Reason))
+
+	return true
+}
+
+// publishNodePoolReconciliationEvent publishes a nodepool reconciliation event
+func (s *Scheduler) publishNodePoolReconciliationEvent(ctx context.Context, target *models.NodePoolReconciliationTarget) bool {
+	// Get nodepool to fetch cluster_id
+	nodepool, err := s.repository.NodePools.GetByIDInternal(ctx, target.NodePoolID)
+	if err != nil {
+		s.logger.Error("Failed to get nodepool for reconciliation event",
+			zap.String("nodepool_id", target.NodePoolID.String()),
+			zap.Error(err))
+		return false
+	}
+
+	event := &models.NodePoolReconciliationEvent{
+		Type:       "nodepool.reconcile",
+		ClusterID:  nodepool.ClusterID.String(),
+		NodePoolID: target.NodePoolID.String(),
+		Reason:     target.Reason,
+		Generation: target.NodePoolGeneration,
+		Timestamp:  time.Now(),
+		Metadata: map[string]interface{}{
+			"scheduled_by":        "reconciliation_scheduler",
+			"last_reconciled_at":  target.LastReconciledAt,
+			"nodepool_generation": target.NodePoolGeneration,
+		},
+	}
+
+	if err := s.publisher.PublishNodePoolReconciliationEvent(ctx, event); err != nil {
+		s.logger.Error("Failed to publish nodepool reconciliation event",
+			zap.String("nodepool_id", target.NodePoolID.String()),
+			zap.String("reason", target.Reason),
+			zap.Error(err))
+		return false
+	}
+
+	// Update reconciliation schedule
+	if err := s.repository.Reconciliation.UpdateNodePoolReconciliationSchedule(ctx, target.NodePoolID); err != nil {
+		s.logger.Warn("Failed to update nodepool reconciliation schedule after publishing event",
+			zap.String("nodepool_id", target.NodePoolID.String()),
+			zap.Error(err))
+		// Don't return false here - the event was published successfully
+	}
+
+	s.logger.Debug("Published nodepool reconciliation event",
+		zap.String("nodepool_id", target.NodePoolID.String()),
+		zap.String("cluster_id", nodepool.ClusterID.String()),
 		zap.String("reason", target.Reason))
 
 	return true
@@ -285,19 +365,34 @@ func (s *Scheduler) GetStats(ctx context.Context) (map[string]interface{}, error
 		"reactive_enabled": s.config.ReactiveEnabled,
 	}
 
-	// Get pending reconciliations count (all clusters)
+	// Get pending cluster reconciliations count
 	allTargets, err := s.repository.Reconciliation.FindClustersNeedingReconciliation(ctx)
 	if err != nil {
-		s.logger.Warn("Failed to get pending reconciliations for stats", zap.Error(err))
-		stats["pending_reconciliations"] = "unknown"
+		s.logger.Warn("Failed to get pending cluster reconciliations for stats", zap.Error(err))
+		stats["pending_cluster_reconciliations"] = "unknown"
 	} else {
 		// Count unique clusters
 		uniqueClusters := make(map[uuid.UUID]bool)
 		for _, target := range allTargets {
 			uniqueClusters[target.ClusterID] = true
 		}
-		stats["pending_reconciliations"] = len(uniqueClusters)
-		stats["total_reconciliation_targets"] = len(allTargets)
+		stats["pending_cluster_reconciliations"] = len(uniqueClusters)
+		stats["total_cluster_reconciliation_targets"] = len(allTargets)
+	}
+
+	// Get pending nodepool reconciliations count
+	nodepoolTargets, err := s.repository.Reconciliation.FindNodePoolsNeedingReconciliation(ctx)
+	if err != nil {
+		s.logger.Warn("Failed to get pending nodepool reconciliations for stats", zap.Error(err))
+		stats["pending_nodepool_reconciliations"] = "unknown"
+	} else {
+		// Count unique nodepools
+		uniqueNodePools := make(map[uuid.UUID]bool)
+		for _, target := range nodepoolTargets {
+			uniqueNodePools[target.NodePoolID] = true
+		}
+		stats["pending_nodepool_reconciliations"] = len(uniqueNodePools)
+		stats["total_nodepool_reconciliation_targets"] = len(nodepoolTargets)
 	}
 
 	return stats, nil

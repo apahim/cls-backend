@@ -108,6 +108,41 @@ func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, created
 	return &nodepool, nil
 }
 
+// GetByIDInternal retrieves a nodepool by ID without client isolation (for internal use only, e.g., scheduler)
+func (r *NodePoolsRepository) GetByIDInternal(ctx context.Context, id uuid.UUID) (*models.NodePool, error) {
+	query := `
+		SELECT id, cluster_id, name, generation, resource_version, spec,
+		       created_at, updated_at, deleted_at
+		FROM nodepools
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	var nodepool models.NodePool
+	err := r.client.QueryRowContext(ctx, query, id).Scan(
+		&nodepool.ID,
+		&nodepool.ClusterID,
+		&nodepool.Name,
+		&nodepool.Generation,
+		&nodepool.ResourceVersion,
+		&nodepool.Spec,
+		&nodepool.CreatedAt,
+		&nodepool.UpdatedAt,
+		&nodepool.DeletedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, models.ErrNodePoolNotFound
+	}
+	if err != nil {
+		r.logger.Error("Failed to get nodepool by ID (internal)",
+			zap.String("nodepool_id", id.String()),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to get nodepool: %w", err)
+	}
+
+	return &nodepool, nil
+}
+
 // GetByClusterAndName retrieves a nodepool by cluster ID and name with client isolation
 func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID uuid.UUID, name string, createdBy string) (*models.NodePool, error) {
 	query := `

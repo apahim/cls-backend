@@ -96,6 +96,7 @@ func NewClient(cfg config.PubSubConfig) (*Client, error) {
 func (c *Client) initializeTopics() error {
 	requiredTopics := []string{
 		c.config.ClusterEventsTopic,
+		c.config.NodePoolEventsTopic,
 	}
 
 	for _, topicName := range requiredTopics {
