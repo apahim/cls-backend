@@ -24,6 +24,9 @@ metadata:
   labels:
     {{- include "cls-backend-application.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.className }}
+    {{- end }}
     {{- if .Values.ingress.managedCertificate.enabled }}
     networking.gke.io/managed-certificates: {{ include "cls-backend-application.fullname" . }}-cert
     {{- end }}
