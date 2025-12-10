@@ -75,7 +75,7 @@ func (p *Publisher) PublishNodePoolEvent(ctx context.Context, eventType string, 
 		return fmt.Errorf("failed to serialize nodepool event: %w", err)
 	}
 
-	err = p.client.Publish(ctx, p.config.ClusterEventsTopic, data, event.GetAttributes())
+	err = p.client.Publish(ctx, p.config.NodePoolEventsTopic, data, event.GetAttributes())
 	if err != nil {
 		p.logger.Error("Failed to publish nodepool event",
 			zap.String("event_type", eventType),
@@ -85,7 +85,7 @@ func (p *Publisher) PublishNodePoolEvent(ctx context.Context, eventType string, 
 		return fmt.Errorf("failed to publish nodepool event: %w", err)
 	}
 
-	p.logger.Info("Lightweight NodePool event published successfully",
+	p.logger.Info("NodePool event published successfully to nodepool-events topic",
 		zap.String("event_type", eventType),
 		zap.String("cluster_id", nodepool.ClusterID.String()),
 		zap.String("nodepool_id", nodepool.ID.String()),
@@ -126,6 +126,11 @@ func (p *Publisher) PublishNodePoolUpdated(ctx context.Context, nodepool *models
 // PublishNodePoolDeleted publishes a nodepool deleted event
 func (p *Publisher) PublishNodePoolDeleted(ctx context.Context, nodepool *models.NodePool) error {
 	return p.PublishNodePoolEvent(ctx, EventTypeNodePoolDeleted, nodepool)
+}
+
+// PublishNodePoolReconcile publishes a nodepool reconcile event
+func (p *Publisher) PublishNodePoolReconcile(ctx context.Context, nodepool *models.NodePool) error {
+	return p.PublishNodePoolEvent(ctx, EventTypeNodePoolReconcile, nodepool)
 }
 
 // PublishReconciliationEvent publishes a reconciliation event (fan-out to all controllers)

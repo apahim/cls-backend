@@ -21,6 +21,7 @@ data:
 
   # Pub/Sub configuration (auto-discovered from cloud-resources chart)
   PUBSUB_CLUSTER_EVENTS_TOPIC: {{ include "cls-backend-application.getPubSubTopic" . | quote }}
+  PUBSUB_NODEPOOL_EVENTS_TOPIC: {{ include "cls-backend-application.getNodePoolEventsTopic" . | quote }}
   PUBSUB_MAX_CONCURRENT_HANDLERS: "10"
   PUBSUB_MAX_OUTSTANDING_MESSAGES: "100"
 

@@ -684,7 +684,62 @@ docs/
 - **✅ API Development**: `docs/developer-guide/api-development.md` (**NEW** - Endpoint creation workflow)
 - **✅ Enhanced Navigation**: Cross-references and related documentation sections throughout
 
-## ✅ NodePool Reactive Reconciliation Complete (2025-12-08)
+## ✅ Separate NodePool Events Implementation (2025-12-10)
+
+**Dedicated Pub/Sub Topic Architecture:**
+- ✅ **Separate Topic**: NodePool events publish to `nodepool-events` topic
+- ✅ **Event Types**: nodepool.created, nodepool.updated, nodepool.deleted, nodepool.reconcile
+- ✅ **Publishing Pattern**: API handlers publish events (following cluster pattern)
+- ✅ **Clean Separation**: NodePool changes do NOT trigger cluster.reconcile events
+- ✅ **Controller Integration**: Controllers subscribe to nodepool-events for nodepool-specific operations
+
+**Container Image**: `gcr.io/apahim-dev-1/cls-backend:separate-nodepool-events-YYYYMMDD-HHMMSS`
+
+### **Pub/Sub Topic Architecture:**
+
+**Topics:**
+1. **`cluster-events`** - Cluster lifecycle and reconciliation events
+   - cluster.created, cluster.updated, cluster.deleted
+   - cluster.reconcile (periodic/reactive cluster reconciliation)
+
+2. **`nodepool-events`** - NodePool lifecycle and reconciliation events
+   - nodepool.created, nodepool.updated, nodepool.deleted
+   - nodepool.reconcile (periodic/reactive nodepool reconciliation)
+
+**Subscriptions:**
+- **Cluster Controllers**: Subscribe to `cluster-events`
+- **NodePool Controllers**: Subscribe to `nodepool-events`
+- **Hybrid Controllers**: Subscribe to both topics as needed
+
+### **Event Publishing Locations:**
+
+**Cluster Events**:
+- API Handlers: `internal/api/cluster_handlers.go`
+- Published via: `ClusterService` → `Publisher.PublishCluster*`
+- Topic: `cluster-events`
+
+**NodePool Events**:
+- API Handlers: `internal/api/nodepool_handlers.go`
+- Published directly: `Publisher.PublishNodePool*`
+- Topic: `nodepool-events`
+
+### **Benefits Achieved:**
+
+✅ **Clean Separation**: NodePool and cluster events completely separated
+✅ **Targeted Subscriptions**: Controllers subscribe only to relevant topics
+✅ **Reduced Event Volume**: No cross-triggering (nodepools don't trigger cluster events)
+✅ **Independent Reconciliation**: NodePools can reconcile without cluster reconciliation
+✅ **Scalable**: Add more event types per topic without affecting other topics
+✅ **Follows Patterns**: NodePool events follow same pattern as cluster events
+
+### **Migration Applied:**
+
+**Migration**: `005_remove_nodepool_trigger_for_separate_events.sql`
+- Removed database trigger `trigger_nodepool_change_reactive_reconciliation`
+- Removed function `trigger_nodepool_change_notification()`
+- Updated reactive_reconciliation_config (removed nodepool_spec from change_types)
+
+## ~~NodePool Reactive Reconciliation Complete (2025-12-08)~~ [SUPERSEDED BY SEPARATE EVENTS]
 
 **Complete Reactive Reconciliation for NodePool Lifecycle Events:**
 - ✅ **Database Triggers Added**: NodePool changes now trigger cluster reconciliation events
@@ -892,8 +947,9 @@ DROP FUNCTION IF EXISTS trigger_nodepool_change_notification();
 - Soft delete: Trigger detects deleted_at changes ✅
 
 ---
-**Last Updated**: 2025-12-08
-**Status**: ✅ **PRODUCTION READY** - Organization multi-tenancy removed, simplified single-tenant architecture
-**Build Status**: ✅ Fully tested with simplified architecture and unit tests passing
-**Architecture Status**: ✅ **SIMPLIFIED** - Single-tenant with external authorization integration points
-**Current Image**: Ready for new build with simplified architecture
+**Last Updated**: 2025-12-10
+**Status**: ✅ **PRODUCTION READY** - Separate nodepool events architecture implemented
+**Build Status**: ✅ Ready for build with separate nodepool-events topic
+**Architecture Status**: ✅ **DUAL-TOPIC** - Separate cluster-events and nodepool-events topics
+**Current Image**: Ready for new build with separate nodepool events architecture
+**Migration Status**: Migration 005 ready to remove database triggers

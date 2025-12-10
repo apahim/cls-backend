@@ -1,8 +1,9 @@
 # Variables
 PROJECT_ID ?= your-project-id
-IMAGE_NAME = cls-backend
+INAGE_REGISTRY = ?= gcr.io
+IMAGE_NAME ?= cls-backend
 IMAGE_TAG ?= latest
-FULL_IMAGE_NAME = gcr.io/$(PROJECT_ID)/$(IMAGE_NAME):$(IMAGE_TAG)
+FULL_IMAGE_NAME = $(IMAGE_REGISTRY)/$(PROJECT_ID)/$(IMAGE_NAME):$(IMAGE_TAG)
 
 # Go variables
 GO_VERSION = 1.23
@@ -174,16 +175,16 @@ generate:
 .PHONY: docker-build
 docker-build:
 	@echo "Building Docker image..."
-	docker build \
+	podman build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
 		-t $(FULL_IMAGE_NAME) .
 
-.PHONY: docker-push
+.PHONY: podman-push
 docker-push: docker-build
 	@echo "Pushing Docker image..."
-	docker push $(FULL_IMAGE_NAME)
+	podman push $(FULL_IMAGE_NAME)
 
 .PHONY: cloud-build
 cloud-build:

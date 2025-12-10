@@ -147,6 +147,30 @@ Auto-discover Pub/Sub topic from cloud-resources chart
 {{- end -}}
 {{- end }}
 
+{{/*
+Auto-discover NodePool Pub/Sub topic from cloud-resources chart
+*/}}
+{{- define "cls-backend-application.getNodePoolEventsTopic" -}}
+{{- $manualTopic := .Values.pubsub.nodepoolEventsTopic -}}
+
+{{- /* Try to lookup PubSubTopic from Config Connector */ -}}
+{{- $topics := lookup "pubsub.cnrm.cloud.google.com/v1beta1" "PubSubTopic" "config-connector" "" -}}
+{{- if $topics.items -}}
+{{- range $topics.items -}}
+{{- if and (contains "nodepool-events" .metadata.name) (not $manualTopic) -}}
+{{- .metadata.name -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Return manual value if provided */ -}}
+{{- if $manualTopic -}}
+{{- $manualTopic -}}
+{{- else -}}
+{{- "nodepool-events" -}}
+{{- end -}}
+{{- end }}
+
 
 {{/*
 Cross-chart parameter validation for consistency with cloud-resources and API gateway charts

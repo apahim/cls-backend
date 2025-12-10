@@ -15,6 +15,22 @@ spec:
   messageStoragePolicy:
     allowedPersistenceRegions:
       - {{ .Values.gcp.region }}
+---
+# Pub/Sub Topic for nodepool events
+apiVersion: pubsub.cnrm.cloud.google.com/v1beta1
+kind: PubSubTopic
+metadata:
+  name: {{ .Values.pubsub.nodepoolEventsTopic }}
+  namespace: {{ .Values.namespace.name | quote }}
+  annotations:
+    cnrm.cloud.google.com/project-id: {{ .Values.gcp.project | quote }}
+  labels:
+    {{- include "cls-backend-cloud-resources.labels" . | nindent 4 }}
+spec:
+  messageRetentionDuration: "604800s"  # 7 days
+  messageStoragePolicy:
+    allowedPersistenceRegions:
+      - {{ .Values.gcp.region }}
 {{- else }}
 {{- fail "gcp.project is required" }}
 {{- end }}

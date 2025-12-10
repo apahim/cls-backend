@@ -96,8 +96,9 @@ database:
 
 # Pub/Sub configuration (auto-discovered from cloud-resources chart)
 pubsub:
-  # Topic name (auto-discovered from cloud-resources chart, defaults to cluster-events)
+  # Topic names (auto-discovered from cloud-resources chart)
   clusterEventsTopic: ""
+  nodepoolEventsTopic: ""
 
 # Service account configuration (auto-discovered from cloud-resources chart)
 serviceAccount:

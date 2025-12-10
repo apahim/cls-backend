@@ -153,7 +153,7 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 	c.JSON(http.StatusCreated, req)
 }
 
-// ListNodePools lists nodepools with optional filtering
+// ListNodePools lists nodepools with optional cluster filtering
 func (h *NodePoolHandler) ListNodePools(c *gin.Context) {
 	// Parse query parameters
 	opts := &models.ListOptions{
@@ -185,28 +185,87 @@ func (h *NodePoolHandler) ListNodePools(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get nodepools
-	nodepools, err := h.repository.NodePools.List(ctx, opts)
-	if err != nil {
-		h.logger.Error("Failed to list nodepools", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
-			utils.ErrCodeInternal,
-			"Failed to list nodepools",
-			err.Error(),
+	// Get user email from context (required for client isolation)
+	userEmail := c.GetString("user_email")
+	if userEmail == "" {
+		h.logger.Error("No user email found in context")
+		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
+			utils.ErrCodeUnauthorized,
+			"Authentication required",
+			"",
 		))
 		return
 	}
 
-	// Get total count for pagination
-	total, err := h.repository.NodePools.Count(ctx, opts)
-	if err != nil {
-		h.logger.Error("Failed to count nodepools", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
-			utils.ErrCodeInternal,
-			"Failed to count nodepools",
-			err.Error(),
-		))
-		return
+	// Parse optional clusterId parameter
+	var nodepools []*models.NodePool
+	var total int64
+	var err error
+
+	if clusterIDStr := c.Query("clusterId"); clusterIDStr != "" {
+		// Cluster-specific listing
+		clusterID, parseErr := uuid.Parse(clusterIDStr)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, utils.NewAPIError(
+				utils.ErrCodeValidation,
+				"Invalid cluster ID",
+				parseErr.Error(),
+			))
+			return
+		}
+
+		nodepools, err = h.repository.NodePools.ListByCluster(ctx, clusterID, userEmail, opts)
+		if err != nil {
+			h.logger.Error("Failed to list nodepools by cluster",
+				zap.String("cluster_id", clusterID.String()),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to list nodepools",
+				err.Error(),
+			))
+			return
+		}
+
+		total, err = h.repository.NodePools.CountByCluster(ctx, clusterID)
+		if err != nil {
+			h.logger.Error("Failed to count nodepools by cluster",
+				zap.String("cluster_id", clusterID.String()),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to count nodepools",
+				err.Error(),
+			))
+			return
+		}
+	} else {
+		// List all nodepools for user (across all clusters)
+		nodepools, err = h.repository.NodePools.List(ctx, userEmail, opts)
+		if err != nil {
+			h.logger.Error("Failed to list all nodepools",
+				zap.String("user_email", userEmail),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to list nodepools",
+				err.Error(),
+			))
+			return
+		}
+
+		total, err = h.repository.NodePools.Count(ctx, userEmail, opts)
+		if err != nil {
+			h.logger.Error("Failed to count all nodepools",
+				zap.String("user_email", userEmail),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to count nodepools",
+				err.Error(),
+			))
+			return
+		}
 	}
 
 	response := map[string]interface{}{

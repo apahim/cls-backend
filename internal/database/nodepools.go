@@ -226,17 +226,19 @@ func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.
 	return nodepools, nil
 }
 
-// List retrieves nodepools with optional filtering
-func (r *NodePoolsRepository) List(ctx context.Context, opts *models.ListOptions) ([]*models.NodePool, error) {
+// List retrieves nodepools with optional filtering and client isolation
+func (r *NodePoolsRepository) List(ctx context.Context, createdBy string, opts *models.ListOptions) ([]*models.NodePool, error) {
 	baseQuery := `
-		SELECT id, cluster_id, name, generation, resource_version, spec,
-			   created_at, updated_at, deleted_at
-		FROM nodepools
-		WHERE deleted_at IS NULL`
+		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+			   np.created_at, np.updated_at, np.deleted_at
+		FROM nodepools np
+		INNER JOIN clusters c ON np.cluster_id = c.id
+		WHERE np.deleted_at IS NULL AND c.deleted_at IS NULL AND c.created_by = $1`
 
 	var args []interface{}
+	args = append(args, createdBy)
 	var conditions []string
-	argIndex := 1
+	argIndex := 2  // Start at 2 because $1 is createdBy
 
 	// Note: Status and Health filters removed - use status.phase instead if needed
 
@@ -421,10 +423,14 @@ func (r *NodePoolsRepository) DeleteByCluster(ctx context.Context, clusterID uui
 }
 
 // Count returns the total number of nodepools matching the filter criteria
-func (r *NodePoolsRepository) Count(ctx context.Context, opts *models.ListOptions) (int64, error) {
-	baseQuery := "SELECT COUNT(*) FROM nodepools WHERE deleted_at IS NULL"
+func (r *NodePoolsRepository) Count(ctx context.Context, createdBy string, opts *models.ListOptions) (int64, error) {
+	baseQuery := `SELECT COUNT(*)
+		FROM nodepools np
+		INNER JOIN clusters c ON np.cluster_id = c.id
+		WHERE np.deleted_at IS NULL AND c.deleted_at IS NULL AND c.created_by = $1`
 
 	var args []interface{}
+	args = append(args, createdBy)
 	var conditions []string
 
 	// Note: Status and Health filters removed - use status.phase instead if needed
@@ -441,7 +447,9 @@ func (r *NodePoolsRepository) Count(ctx context.Context, opts *models.ListOption
 	var count int64
 	err := r.client.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
-		r.logger.Error("Failed to count nodepools", zap.Error(err))
+		r.logger.Error("Failed to count nodepools",
+			zap.String("created_by", createdBy),
+			zap.Error(err))
 		return 0, fmt.Errorf("failed to count nodepools: %w", err)
 	}
 

@@ -24,12 +24,13 @@ type MessageHandler interface {
 
 // Event types for Pub/Sub messages (simplified for fan-out architecture)
 const (
-	EventTypeClusterCreated  = "cluster.created"
-	EventTypeClusterUpdated  = "cluster.updated"
-	EventTypeClusterDeleted  = "cluster.deleted"
-	EventTypeNodePoolCreated = "nodepool.created"
-	EventTypeNodePoolUpdated = "nodepool.updated"
-	EventTypeNodePoolDeleted = "nodepool.deleted"
+	EventTypeClusterCreated    = "cluster.created"
+	EventTypeClusterUpdated    = "cluster.updated"
+	EventTypeClusterDeleted    = "cluster.deleted"
+	EventTypeNodePoolCreated   = "nodepool.created"
+	EventTypeNodePoolUpdated   = "nodepool.updated"
+	EventTypeNodePoolDeleted   = "nodepool.deleted"
+	EventTypeNodePoolReconcile = "nodepool.reconcile"
 )
 
 // ClusterEvent represents a cluster lifecycle event (lightweight)
