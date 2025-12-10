@@ -1,0 +1,151 @@
+# CLS Backend Deployment Values for rc-1 cluster
+# GCP Configuration
+gcp:
+  project: "apahim-dev-1"
+  region: "us-central1"
+
+# Application namespace
+namespace:
+  name: "cls-system"
+  create: true
+
+# Container image configuration
+image:
+  repository: "quay.io/apahim/cls-backend-test"
+  tag: "nodepool-reactive"
+  pullPolicy: Always
+
+# Application deployment configuration
+deployment:
+  replicas: 1  # Start with 1 replica for testing
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# Resource requests and limits
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# External DNS - disabled for now
+externalDns:
+  enabled: false
+  hostname: ""
+
+# Database configuration - simplified for testing
+database:
+  type: "cloud-sql"
+  cloudSql:
+    connectionName: "" # Will auto-generate: apahim-dev-1:us-central1:cls-backend-db
+    enableProxy: true
+    proxyImage: "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0"
+    proxyPort: 5432
+  instanceName: "cls-backend-db"
+  databaseName: "cls_backend"
+  username: "cls_user"
+  passwordSecret:
+    name: "cls-backend-db-password"
+
+# Pub/Sub configuration
+pubsub:
+  clusterEventsTopic: "cluster-events"
+
+# Service account configuration
+serviceAccount:
+  name: "cls-backend"
+  gcpServiceAccountName: "cls-backend"
+  workloadIdentity: true
+
+# Application configuration
+config:
+  port: 8080
+  environment: "development"  # Set to development for testing
+  logLevel: "debug"  # More verbose logging for testing
+  logFormat: "console"  # Easier to read in kubectl logs
+
+  # Metrics
+  metricsEnabled: true
+  metricsPort: 8081
+
+  # Authentication - disabled for testing
+  disableAuth: true
+
+  # Reconciliation configuration
+  reconciliation:
+    enabled: true
+    checkInterval: "1m"
+    maxConcurrent: 10
+    adaptiveEnabled: true
+    healthyInterval: "5m"
+    unhealyInterval: "30s"
+    defaultInterval: "5m"
+
+  # Reactive Reconciliation - ENABLED for testing nodepool triggers
+  reactiveReconciliation:
+    enabled: true
+    debounceDuration: "2s"
+
+  # Aggregation configuration
+  aggregation:
+    enabled: true
+    interval: "30s"
+    batchSize: 50
+    maxConcurrency: 10
+    retryAttempts: 3
+    retryBackoff: "5s"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # Changed to false for easier testing
+  capabilities:
+    drop:
+      - ALL
+
+# Liveness and readiness probes
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Pod anti-affinity - disabled for single replica
+affinity: {}
+
+# External Secrets Operator configuration
+externalSecrets:
+  refreshInterval: "1h"
+
+# Labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: cls-backend-application
+  app.kubernetes.io/component: application
+  app.kubernetes.io/part-of: cls-backend
+  app.kubernetes.io/managed-by: helm
+  version: nodepool-reactive

@@ -13,7 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cls_user -d cls_backend"]
       interval: 10s
@@ -103,6 +102,10 @@ services:
       RECONCILIATION_CHECK_INTERVAL: 30s
       RECONCILIATION_MAX_CONCURRENT: 10
 
+      # Reactive Reconciliation (for testing nodepool triggers)
+      REACTIVE_RECONCILIATION_ENABLED: true
+      REACTIVE_RECONCILIATION_DEBOUNCE_DURATION: 2s
+
       # Metrics
       METRICS_ENABLED: true
       METRICS_PORT: 8081
@@ -129,8 +132,15 @@ services:
     command: >
       bash -c "
         echo 'Running database migrations...'
-        psql $$DATABASE_URL -f /app/internal/database/migrations/001_complete_schema.sql
-        echo 'Database migrations completed!'
+        echo '==> Applying 001_final_schema.sql'
+        psql $$DATABASE_URL -f /app/internal/database/migrations/001_final_schema.sql
+        echo '==> Applying 002_add_status_dirty_trigger.sql'
+        psql $$DATABASE_URL -f /app/internal/database/migrations/002_add_status_dirty_trigger.sql
+        echo '==> Applying 003_fix_reconciliation_intervals.sql'
+        psql $$DATABASE_URL -f /app/internal/database/migrations/003_fix_reconciliation_intervals.sql
+        echo '==> Applying 004_add_nodepool_reactive_reconciliation.sql'
+        psql $$DATABASE_URL -f /app/internal/database/migrations/004_add_nodepool_reactive_reconciliation.sql
+        echo '✅ All database migrations completed successfully!'
       "
     volumes:
       - ../../internal/database/migrations:/app/internal/database/migrations
