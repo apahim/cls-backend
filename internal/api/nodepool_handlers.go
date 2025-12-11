@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apahim/cls-backend/internal/database"
 	"github.com/apahim/cls-backend/internal/middleware"
@@ -376,7 +377,7 @@ func (h *NodePoolHandler) UpdateNodePool(c *gin.Context) {
 		return
 	}
 
-	var req models.NodePool
+	var req models.NodePoolUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, utils.NewAPIError(
@@ -426,25 +427,17 @@ func (h *NodePoolHandler) UpdateNodePool(c *gin.Context) {
 	}
 
 	// Track changes for event publishing
-	changes := map[string]interface{}{}
-	if existing.Spec != req.Spec {
-		changes["spec"] = map[string]interface{}{
-			"old": existing.Spec,
-			"new": req.Spec,
-		}
-	}
+	hasChanges := existing.Spec != req.Spec
 
-	// Update nodepool fields
-	req.ID = id
-	req.ClusterID = existing.ClusterID // Don't allow cluster ID changes
-	req.Generation = existing.Generation + 1
-	req.ResourceVersion = uuid.New().String()
-	req.CreatedAt = existing.CreatedAt
-
-	// Status is now managed via controller_status table, not via fields
+	// Update only mutable fields on existing object
+	// This preserves all immutable fields: name, created_by, cluster_id, id, created_at
+	existing.Spec = req.Spec
+	existing.Generation = existing.Generation + 1
+	existing.ResourceVersion = uuid.New().String()
+	existing.UpdatedAt = time.Now()
 
 	// Update nodepool in database
-	err = h.repository.NodePools.Update(ctx, &req, userEmail)
+	err = h.repository.NodePools.Update(ctx, existing, userEmail)
 	if err != nil {
 		h.logger.Error("Failed to update nodepool",
 			zap.String("nodepool_id", id.String()),
@@ -459,22 +452,22 @@ func (h *NodePoolHandler) UpdateNodePool(c *gin.Context) {
 	}
 
 	// Publish nodepool updated event if there were changes
-	if len(changes) > 0 && h.pubsub != nil && h.pubsub.IsRunning() {
-		if err := h.pubsub.GetPublisher().PublishNodePoolUpdated(ctx, &req); err != nil {
+	if hasChanges && h.pubsub != nil && h.pubsub.IsRunning() {
+		if err := h.pubsub.GetPublisher().PublishNodePoolUpdated(ctx, existing); err != nil {
 			h.logger.Warn("Failed to publish nodepool updated event",
-				zap.String("nodepool_id", req.ID.String()),
+				zap.String("nodepool_id", existing.ID.String()),
 				zap.Error(err),
 			)
 		}
 	}
 
 	h.logger.Info("NodePool updated successfully",
-		zap.String("nodepool_id", req.ID.String()),
-		zap.String("nodepool_name", req.Name),
-		zap.Int64("generation", req.Generation),
+		zap.String("nodepool_id", existing.ID.String()),
+		zap.String("nodepool_name", existing.Name),
+		zap.Int64("generation", existing.Generation),
 	)
 
-	c.JSON(http.StatusOK, req)
+	c.JSON(http.StatusOK, existing)
 }
 
 // DeleteNodePool deletes a nodepool
