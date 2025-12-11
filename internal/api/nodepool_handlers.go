@@ -7,14 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/apahim/cls-backend/internal/database"
 	"github.com/apahim/cls-backend/internal/middleware"
 	"github.com/apahim/cls-backend/internal/models"
 	"github.com/apahim/cls-backend/internal/pubsub"
 	"github.com/apahim/cls-backend/internal/utils"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // NodePoolHandler handles nodepool-related HTTP requests
@@ -432,7 +433,7 @@ func (h *NodePoolHandler) UpdateNodePool(c *gin.Context) {
 	// Update only mutable fields on existing object
 	// This preserves all immutable fields: name, created_by, cluster_id, id, created_at
 	existing.Spec = req.Spec
-	existing.Generation = existing.Generation + 1
+	existing.Generation++
 	existing.ResourceVersion = uuid.New().String()
 	existing.UpdatedAt = time.Now()
 

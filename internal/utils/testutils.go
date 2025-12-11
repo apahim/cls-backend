@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -196,7 +197,7 @@ func AssertFalse(t *testing.T, condition bool, msgAndArgs ...interface{}) {
 // AssertContains checks if string contains substring
 func AssertContains(t *testing.T, str, substr string, msgAndArgs ...interface{}) {
 	t.Helper()
-	if !contains(str, substr) {
+	if !strings.Contains(str, substr) {
 		t.Errorf("Expected '%s' to contain '%s'. %v", str, substr, msgAndArgs)
 	}
 }
