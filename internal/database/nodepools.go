@@ -39,16 +39,17 @@ func (r *NodePoolsRepository) Create(ctx context.Context, nodepool *models.NodeP
 
 	query := `
 		INSERT INTO nodepools (
-			id, cluster_id, name, generation, resource_version, spec,
+			id, cluster_id, name, created_by, generation, resource_version, spec,
 			status_dirty, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		)`
 
 	_, err := r.client.ExecContext(ctx, query,
 		nodepool.ID,
 		nodepool.ClusterID,
 		nodepool.Name,
+		nodepool.CreatedBy,
 		nodepool.Generation,
 		nodepool.ResourceVersion,
 		nodepool.Spec,
@@ -78,7 +79,7 @@ func (r *NodePoolsRepository) Create(ctx context.Context, nodepool *models.NodeP
 // GetByID retrieves a nodepool by ID with client isolation (through cluster ownership)
 func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, createdBy string) (*models.NodePool, error) {
 	query := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
 			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
@@ -90,6 +91,7 @@ func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, created
 		&nodepool.ID,
 		&nodepool.ClusterID,
 		&nodepool.Name,
+		&nodepool.CreatedBy,
 		&nodepool.Generation,
 		&nodepool.ResourceVersion,
 		&nodepool.Spec,
@@ -125,7 +127,7 @@ func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, created
 // GetByIDInternal retrieves a nodepool by ID without client isolation (for internal use only, e.g., scheduler)
 func (r *NodePoolsRepository) GetByIDInternal(ctx context.Context, id uuid.UUID) (*models.NodePool, error) {
 	query := `
-		SELECT id, cluster_id, name, generation, resource_version, spec,
+		SELECT id, cluster_id, name, created_by, generation, resource_version, spec,
 		       status, status_dirty,
 		       created_at, updated_at, deleted_at
 		FROM nodepools
@@ -136,6 +138,7 @@ func (r *NodePoolsRepository) GetByIDInternal(ctx context.Context, id uuid.UUID)
 		&nodepool.ID,
 		&nodepool.ClusterID,
 		&nodepool.Name,
+		&nodepool.CreatedBy,
 		&nodepool.Generation,
 		&nodepool.ResourceVersion,
 		&nodepool.Spec,
@@ -171,7 +174,7 @@ func (r *NodePoolsRepository) GetByIDInternal(ctx context.Context, id uuid.UUID)
 // GetByClusterAndName retrieves a nodepool by cluster ID and name with client isolation
 func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID uuid.UUID, name string, createdBy string) (*models.NodePool, error) {
 	query := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
 			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
@@ -183,6 +186,7 @@ func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID
 		&nodepool.ID,
 		&nodepool.ClusterID,
 		&nodepool.Name,
+		&nodepool.CreatedBy,
 		&nodepool.Generation,
 		&nodepool.ResourceVersion,
 		&nodepool.Spec,
@@ -219,7 +223,7 @@ func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID
 // ListByCluster retrieves all nodepools for a cluster with client isolation
 func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.UUID, createdBy string, opts *models.ListOptions) ([]*models.NodePool, error) {
 	baseQuery := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
 			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
@@ -276,6 +280,7 @@ func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.
 			&nodepool.ID,
 			&nodepool.ClusterID,
 			&nodepool.Name,
+			&nodepool.CreatedBy,
 			&nodepool.Generation,
 			&nodepool.ResourceVersion,
 			&nodepool.Spec,
@@ -311,7 +316,7 @@ func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.
 // List retrieves nodepools with optional filtering and client isolation
 func (r *NodePoolsRepository) List(ctx context.Context, createdBy string, opts *models.ListOptions) ([]*models.NodePool, error) {
 	baseQuery := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
 			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
@@ -365,6 +370,7 @@ func (r *NodePoolsRepository) List(ctx context.Context, createdBy string, opts *
 			&nodepool.ID,
 			&nodepool.ClusterID,
 			&nodepool.Name,
+			&nodepool.CreatedBy,
 			&nodepool.Generation,
 			&nodepool.ResourceVersion,
 			&nodepool.Spec,

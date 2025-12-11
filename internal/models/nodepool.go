@@ -14,6 +14,7 @@ type NodePool struct {
 	ID              uuid.UUID           `json:"id" db:"id"`
 	ClusterID       uuid.UUID           `json:"cluster_id" db:"cluster_id"`
 	Name            string              `json:"name" db:"name"`
+	CreatedBy       string              `json:"created_by,omitempty" db:"created_by"` // User who created the nodepool
 	Generation      int64               `json:"generation" db:"generation"`
 	ResourceVersion string              `json:"resource_version" db:"resource_version"`
 	Spec            NodePoolSpec        `json:"spec" db:"spec"`
@@ -32,7 +33,6 @@ type NodePoolSpec struct {
 	Management       NodePoolManagement   `json:"management"`
 	Platform         NodePoolPlatformSpec `json:"platform"`
 	Release          NodePoolReleaseSpec  `json:"release"`
-	ClusterName      string               `json:"clusterName"`
 	NodeDrainTimeout string               `json:"nodeDrainTimeout,omitempty"`
 }
 

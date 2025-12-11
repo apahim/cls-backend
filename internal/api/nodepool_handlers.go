@@ -118,6 +118,7 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 	req.ID = uuid.New()
 	req.Generation = 1
 	req.ResourceVersion = uuid.New().String()
+	req.CreatedBy = userEmail
 
 	// Create nodepool in database
 	err = h.repository.NodePools.Create(ctx, &req)
