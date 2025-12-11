@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -142,18 +143,37 @@ func AssertNotEqual(t *testing.T, notExpected, actual interface{}, msgAndArgs ..
 }
 
 // AssertNotNil checks if value is not nil
+// Handles the Go interface gotcha where typed nil pointers are not nil interfaces
 func AssertNotNil(t *testing.T, value interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
-	if value == nil {
+	if isNil(value) {
 		t.Errorf("Expected value to be not nil. %v", msgAndArgs)
 	}
 }
 
 // AssertNil checks if value is nil
+// Handles the Go interface gotcha where typed nil pointers are not nil interfaces
 func AssertNil(t *testing.T, value interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
-	if value != nil {
+	if !isNil(value) {
 		t.Errorf("Expected value to be nil, got %v. %v", value, msgAndArgs)
+	}
+}
+
+// isNil checks if a value is nil, handling the interface nil gotcha
+// In Go, a typed nil pointer wrapped in an interface is not nil
+func isNil(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+
+	// Use reflection to check if the underlying value is nil
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
 	}
 }
 
