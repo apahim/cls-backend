@@ -1,8 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/apahim/cls-backend/internal/database"
 	"github.com/apahim/cls-backend/internal/middleware"
@@ -123,6 +125,20 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 	// Create nodepool in database
 	err = h.repository.NodePools.Create(ctx, &req)
 	if err != nil {
+		// Check for unique constraint violation (duplicate name in cluster)
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "UNIQUE constraint") {
+			h.logger.Warn("NodePool name already exists in cluster",
+				zap.String("nodepool_name", req.Name),
+				zap.String("cluster_id", req.ClusterID.String()),
+			)
+			c.JSON(http.StatusConflict, utils.NewAPIError(
+				utils.ErrCodeConflict,
+				"NodePool already exists",
+				fmt.Sprintf("a nodepool with name '%s' already exists in this cluster", req.Name),
+			))
+			return
+		}
+
 		h.logger.Error("Failed to create nodepool",
 			zap.String("nodepool_name", req.Name),
 			zap.String("cluster_id", req.ClusterID.String()),
@@ -550,7 +566,10 @@ func (h *NodePoolHandler) DeleteNodePool(c *gin.Context) {
 		zap.String("nodepool_name", nodepool.Name),
 	)
 
-	c.JSON(http.StatusNoContent, nil)
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":     "nodepool deletion initiated",
+		"nodepool_id": id.String(),
+	})
 }
 
 // GetNodePoolStatus retrieves nodepool status information
