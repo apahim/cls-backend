@@ -14,15 +14,17 @@ import (
 
 // NodePoolsRepository handles database operations for nodepools
 type NodePoolsRepository struct {
-	client *Client
-	logger *utils.Logger
+	client           *Client
+	logger           *utils.Logger
+	statusAggregator *StatusAggregator // For real-time status aggregation
 }
 
 // NewNodePoolsRepository creates a new nodepools repository
 func NewNodePoolsRepository(client *Client) *NodePoolsRepository {
 	return &NodePoolsRepository{
-		client: client,
-		logger: utils.NewLogger("nodepools_repo"),
+		client:           client,
+		logger:           utils.NewLogger("nodepools_repo"),
+		statusAggregator: NewStatusAggregator(client), // Initialize status aggregator
 	}
 }
 
@@ -37,19 +39,21 @@ func (r *NodePoolsRepository) Create(ctx context.Context, nodepool *models.NodeP
 
 	query := `
 		INSERT INTO nodepools (
-			id, cluster_id, name, generation, resource_version, spec,
-			created_at, updated_at
+			id, cluster_id, name, created_by, generation, resource_version, spec,
+			status_dirty, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		)`
 
 	_, err := r.client.ExecContext(ctx, query,
 		nodepool.ID,
 		nodepool.ClusterID,
 		nodepool.Name,
+		nodepool.CreatedBy,
 		nodepool.Generation,
 		nodepool.ResourceVersion,
 		nodepool.Spec,
+		true, // status_dirty - new nodepools need status calculation
 		nodepool.CreatedAt,
 		nodepool.UpdatedAt,
 	)
@@ -75,7 +79,8 @@ func (r *NodePoolsRepository) Create(ctx context.Context, nodepool *models.NodeP
 // GetByID retrieves a nodepool by ID with client isolation (through cluster ownership)
 func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, createdBy string) (*models.NodePool, error) {
 	query := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
+			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
 		INNER JOIN clusters c ON np.cluster_id = c.id
@@ -86,9 +91,12 @@ func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, created
 		&nodepool.ID,
 		&nodepool.ClusterID,
 		&nodepool.Name,
+		&nodepool.CreatedBy,
 		&nodepool.Generation,
 		&nodepool.ResourceVersion,
 		&nodepool.Spec,
+		&nodepool.Status,
+		&nodepool.StatusDirty,
 		&nodepool.CreatedAt,
 		&nodepool.UpdatedAt,
 		&nodepool.DeletedAt,
@@ -105,13 +113,69 @@ func (r *NodePoolsRepository) GetByID(ctx context.Context, id uuid.UUID, created
 		return nil, fmt.Errorf("failed to get nodepool: %w", err)
 	}
 
+	// Enrich with real-time status if dirty
+	if err := r.statusAggregator.EnrichNodePoolWithStatus(ctx, &nodepool); err != nil {
+		r.logger.Warn("Failed to enrich nodepool with status",
+			zap.String("nodepool_id", id.String()),
+			zap.Error(err))
+		// Continue without failing - return nodepool with existing status
+	}
+
+	return &nodepool, nil
+}
+
+// GetByIDInternal retrieves a nodepool by ID without client isolation (for internal use only, e.g., scheduler)
+func (r *NodePoolsRepository) GetByIDInternal(ctx context.Context, id uuid.UUID) (*models.NodePool, error) {
+	query := `
+		SELECT id, cluster_id, name, created_by, generation, resource_version, spec,
+		       status, status_dirty,
+		       created_at, updated_at, deleted_at
+		FROM nodepools
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	var nodepool models.NodePool
+	err := r.client.QueryRowContext(ctx, query, id).Scan(
+		&nodepool.ID,
+		&nodepool.ClusterID,
+		&nodepool.Name,
+		&nodepool.CreatedBy,
+		&nodepool.Generation,
+		&nodepool.ResourceVersion,
+		&nodepool.Spec,
+		&nodepool.Status,
+		&nodepool.StatusDirty,
+		&nodepool.CreatedAt,
+		&nodepool.UpdatedAt,
+		&nodepool.DeletedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, models.ErrNodePoolNotFound
+	}
+	if err != nil {
+		r.logger.Error("Failed to get nodepool by ID (internal)",
+			zap.String("nodepool_id", id.String()),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to get nodepool: %w", err)
+	}
+
+	// Enrich with real-time status if dirty
+	if err := r.statusAggregator.EnrichNodePoolWithStatus(ctx, &nodepool); err != nil {
+		r.logger.Warn("Failed to enrich nodepool with status",
+			zap.String("nodepool_id", id.String()),
+			zap.Error(err))
+		// Continue without failing - return nodepool with existing status
+	}
+
 	return &nodepool, nil
 }
 
 // GetByClusterAndName retrieves a nodepool by cluster ID and name with client isolation
 func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID uuid.UUID, name string, createdBy string) (*models.NodePool, error) {
 	query := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
+			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
 		INNER JOIN clusters c ON np.cluster_id = c.id
@@ -122,9 +186,12 @@ func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID
 		&nodepool.ID,
 		&nodepool.ClusterID,
 		&nodepool.Name,
+		&nodepool.CreatedBy,
 		&nodepool.Generation,
 		&nodepool.ResourceVersion,
 		&nodepool.Spec,
+		&nodepool.Status,
+		&nodepool.StatusDirty,
 		&nodepool.CreatedAt,
 		&nodepool.UpdatedAt,
 		&nodepool.DeletedAt,
@@ -142,13 +209,22 @@ func (r *NodePoolsRepository) GetByClusterAndName(ctx context.Context, clusterID
 		return nil, fmt.Errorf("failed to get nodepool: %w", err)
 	}
 
+	// Enrich with real-time status if dirty
+	if err := r.statusAggregator.EnrichNodePoolWithStatus(ctx, &nodepool); err != nil {
+		r.logger.Warn("Failed to enrich nodepool with status",
+			zap.String("nodepool_id", nodepool.ID.String()),
+			zap.Error(err))
+		// Continue without failing - return nodepool with existing status
+	}
+
 	return &nodepool, nil
 }
 
 // ListByCluster retrieves all nodepools for a cluster with client isolation
 func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.UUID, createdBy string, opts *models.ListOptions) ([]*models.NodePool, error) {
 	baseQuery := `
-		SELECT np.id, np.cluster_id, np.name, np.generation, np.resource_version, np.spec,
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
+			   np.status, np.status_dirty,
 			   np.created_at, np.updated_at, np.deleted_at
 		FROM nodepools np
 		INNER JOIN clusters c ON np.cluster_id = c.id
@@ -204,9 +280,12 @@ func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.
 			&nodepool.ID,
 			&nodepool.ClusterID,
 			&nodepool.Name,
+			&nodepool.CreatedBy,
 			&nodepool.Generation,
 			&nodepool.ResourceVersion,
 			&nodepool.Spec,
+			&nodepool.Status,
+			&nodepool.StatusDirty,
 			&nodepool.CreatedAt,
 			&nodepool.UpdatedAt,
 			&nodepool.DeletedAt,
@@ -223,20 +302,31 @@ func (r *NodePoolsRepository) ListByCluster(ctx context.Context, clusterID uuid.
 		return nil, fmt.Errorf("error iterating nodepools: %w", err)
 	}
 
+	// Enrich all nodepools with real-time status (batch operation)
+	if err := r.statusAggregator.EnrichNodePoolsWithStatus(ctx, nodepools); err != nil {
+		r.logger.Warn("Failed to enrich nodepools with status",
+			zap.String("cluster_id", clusterID.String()),
+			zap.Error(err))
+		// Continue without failing - return nodepools with existing status
+	}
+
 	return nodepools, nil
 }
 
-// List retrieves nodepools with optional filtering
-func (r *NodePoolsRepository) List(ctx context.Context, opts *models.ListOptions) ([]*models.NodePool, error) {
+// List retrieves nodepools with optional filtering and client isolation
+func (r *NodePoolsRepository) List(ctx context.Context, createdBy string, opts *models.ListOptions) ([]*models.NodePool, error) {
 	baseQuery := `
-		SELECT id, cluster_id, name, generation, resource_version, spec,
-			   created_at, updated_at, deleted_at
-		FROM nodepools
-		WHERE deleted_at IS NULL`
+		SELECT np.id, np.cluster_id, np.name, np.created_by, np.generation, np.resource_version, np.spec,
+			   np.status, np.status_dirty,
+			   np.created_at, np.updated_at, np.deleted_at
+		FROM nodepools np
+		INNER JOIN clusters c ON np.cluster_id = c.id
+		WHERE np.deleted_at IS NULL AND c.deleted_at IS NULL AND c.created_by = $1`
 
 	var args []interface{}
+	args = append(args, createdBy)
 	var conditions []string
-	argIndex := 1
+	argIndex := 2 // Start at 2 because $1 is createdBy
 
 	// Note: Status and Health filters removed - use status.phase instead if needed
 
@@ -280,9 +370,12 @@ func (r *NodePoolsRepository) List(ctx context.Context, opts *models.ListOptions
 			&nodepool.ID,
 			&nodepool.ClusterID,
 			&nodepool.Name,
+			&nodepool.CreatedBy,
 			&nodepool.Generation,
 			&nodepool.ResourceVersion,
 			&nodepool.Spec,
+			&nodepool.Status,
+			&nodepool.StatusDirty,
 			&nodepool.CreatedAt,
 			&nodepool.UpdatedAt,
 			&nodepool.DeletedAt,
@@ -297,6 +390,12 @@ func (r *NodePoolsRepository) List(ctx context.Context, opts *models.ListOptions
 	if err = rows.Err(); err != nil {
 		r.logger.Error("Error iterating nodepool rows", zap.Error(err))
 		return nil, fmt.Errorf("error iterating nodepools: %w", err)
+	}
+
+	// Enrich all nodepools with real-time status (batch operation)
+	if err := r.statusAggregator.EnrichNodePoolsWithStatus(ctx, nodepools); err != nil {
+		r.logger.Warn("Failed to enrich nodepools with status", zap.Error(err))
+		// Continue without failing - return nodepools with existing status
 	}
 
 	return nodepools, nil
@@ -421,10 +520,14 @@ func (r *NodePoolsRepository) DeleteByCluster(ctx context.Context, clusterID uui
 }
 
 // Count returns the total number of nodepools matching the filter criteria
-func (r *NodePoolsRepository) Count(ctx context.Context, opts *models.ListOptions) (int64, error) {
-	baseQuery := "SELECT COUNT(*) FROM nodepools WHERE deleted_at IS NULL"
+func (r *NodePoolsRepository) Count(ctx context.Context, createdBy string, opts *models.ListOptions) (int64, error) {
+	baseQuery := `SELECT COUNT(*)
+		FROM nodepools np
+		INNER JOIN clusters c ON np.cluster_id = c.id
+		WHERE np.deleted_at IS NULL AND c.deleted_at IS NULL AND c.created_by = $1`
 
 	var args []interface{}
+	args = append(args, createdBy)
 	var conditions []string
 
 	// Note: Status and Health filters removed - use status.phase instead if needed
@@ -441,7 +544,9 @@ func (r *NodePoolsRepository) Count(ctx context.Context, opts *models.ListOption
 	var count int64
 	err := r.client.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
-		r.logger.Error("Failed to count nodepools", zap.Error(err))
+		r.logger.Error("Failed to count nodepools",
+			zap.String("created_by", createdBy),
+			zap.Error(err))
 		return 0, fmt.Errorf("failed to count nodepools: %w", err)
 	}
 

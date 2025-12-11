@@ -79,6 +79,7 @@ type DatabaseConfig struct {
 type PubSubConfig struct {
 	ProjectID              string `mapstructure:"project_id"`
 	ClusterEventsTopic     string `mapstructure:"cluster_events_topic"`
+	NodePoolEventsTopic    string `mapstructure:"nodepool_events_topic"`
 	EmulatorHost           string `mapstructure:"emulator_host"`
 	CredentialsFile        string `mapstructure:"credentials_file"`
 	MaxConcurrentHandlers  int    `mapstructure:"max_concurrent_handlers"`
@@ -118,6 +119,7 @@ func Load() (*Config, error) {
 		PubSub: PubSubConfig{
 			ProjectID:              getEnv("GOOGLE_CLOUD_PROJECT", ""),
 			ClusterEventsTopic:     getEnv("PUBSUB_CLUSTER_EVENTS_TOPIC", "cluster-events"),
+			NodePoolEventsTopic:    getEnv("PUBSUB_NODEPOOL_EVENTS_TOPIC", "nodepool-events"),
 			EmulatorHost:           getEnv("PUBSUB_EMULATOR_HOST", ""),
 			CredentialsFile:        getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
 			MaxConcurrentHandlers:  getIntEnv("PUBSUB_MAX_CONCURRENT_HANDLERS", 10),

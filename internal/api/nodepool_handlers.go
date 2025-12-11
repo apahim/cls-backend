@@ -1,10 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/apahim/cls-backend/internal/database"
+	"github.com/apahim/cls-backend/internal/middleware"
 	"github.com/apahim/cls-backend/internal/models"
 	"github.com/apahim/cls-backend/internal/pubsub"
 	"github.com/apahim/cls-backend/internal/utils"
@@ -117,10 +120,25 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 	req.ID = uuid.New()
 	req.Generation = 1
 	req.ResourceVersion = uuid.New().String()
+	req.CreatedBy = userEmail
 
 	// Create nodepool in database
 	err = h.repository.NodePools.Create(ctx, &req)
 	if err != nil {
+		// Check for unique constraint violation (duplicate name in cluster)
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "UNIQUE constraint") {
+			h.logger.Warn("NodePool name already exists in cluster",
+				zap.String("nodepool_name", req.Name),
+				zap.String("cluster_id", req.ClusterID.String()),
+			)
+			c.JSON(http.StatusConflict, utils.NewAPIError(
+				utils.ErrCodeConflict,
+				"NodePool already exists",
+				fmt.Sprintf("a nodepool with name '%s' already exists in this cluster", req.Name),
+			))
+			return
+		}
+
 		h.logger.Error("Failed to create nodepool",
 			zap.String("nodepool_name", req.Name),
 			zap.String("cluster_id", req.ClusterID.String()),
@@ -153,7 +171,7 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 	c.JSON(http.StatusCreated, req)
 }
 
-// ListNodePools lists nodepools with optional filtering
+// ListNodePools lists nodepools with optional cluster filtering
 func (h *NodePoolHandler) ListNodePools(c *gin.Context) {
 	// Parse query parameters
 	opts := &models.ListOptions{
@@ -185,28 +203,87 @@ func (h *NodePoolHandler) ListNodePools(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get nodepools
-	nodepools, err := h.repository.NodePools.List(ctx, opts)
-	if err != nil {
-		h.logger.Error("Failed to list nodepools", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
-			utils.ErrCodeInternal,
-			"Failed to list nodepools",
-			err.Error(),
+	// Get user email from context (required for client isolation)
+	userEmail := c.GetString("user_email")
+	if userEmail == "" {
+		h.logger.Error("No user email found in context")
+		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
+			utils.ErrCodeUnauthorized,
+			"Authentication required",
+			"",
 		))
 		return
 	}
 
-	// Get total count for pagination
-	total, err := h.repository.NodePools.Count(ctx, opts)
-	if err != nil {
-		h.logger.Error("Failed to count nodepools", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
-			utils.ErrCodeInternal,
-			"Failed to count nodepools",
-			err.Error(),
-		))
-		return
+	// Parse optional clusterId parameter
+	var nodepools []*models.NodePool
+	var total int64
+	var err error
+
+	if clusterIDStr := c.Query("clusterId"); clusterIDStr != "" {
+		// Cluster-specific listing
+		clusterID, parseErr := uuid.Parse(clusterIDStr)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, utils.NewAPIError(
+				utils.ErrCodeValidation,
+				"Invalid cluster ID",
+				parseErr.Error(),
+			))
+			return
+		}
+
+		nodepools, err = h.repository.NodePools.ListByCluster(ctx, clusterID, userEmail, opts)
+		if err != nil {
+			h.logger.Error("Failed to list nodepools by cluster",
+				zap.String("cluster_id", clusterID.String()),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to list nodepools",
+				err.Error(),
+			))
+			return
+		}
+
+		total, err = h.repository.NodePools.CountByCluster(ctx, clusterID)
+		if err != nil {
+			h.logger.Error("Failed to count nodepools by cluster",
+				zap.String("cluster_id", clusterID.String()),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to count nodepools",
+				err.Error(),
+			))
+			return
+		}
+	} else {
+		// List all nodepools for user (across all clusters)
+		nodepools, err = h.repository.NodePools.List(ctx, userEmail, opts)
+		if err != nil {
+			h.logger.Error("Failed to list all nodepools",
+				zap.String("user_email", userEmail),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to list nodepools",
+				err.Error(),
+			))
+			return
+		}
+
+		total, err = h.repository.NodePools.Count(ctx, userEmail, opts)
+		if err != nil {
+			h.logger.Error("Failed to count all nodepools",
+				zap.String("user_email", userEmail),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to count nodepools",
+				err.Error(),
+			))
+			return
+		}
 	}
 
 	response := map[string]interface{}{
@@ -234,10 +311,10 @@ func (h *NodePoolHandler) GetNodePool(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
 			utils.ErrCodeUnauthorized,
 			"Authentication required",
@@ -246,7 +323,21 @@ func (h *NodePoolHandler) GetNodePool(c *gin.Context) {
 		return
 	}
 
-	nodepool, err := h.repository.NodePools.GetByID(ctx, id, userEmail)
+	h.logger.Info("Getting nodepool",
+		zap.String("nodepool_id", idParam),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
+	)
+
+	var nodepool *models.NodePool
+	if userCtx.IsController {
+		// Controllers can access any nodepool
+		nodepool, err = h.repository.NodePools.GetByIDInternal(ctx, id)
+	} else {
+		// Users can only access their own nodepools (via cluster ownership)
+		nodepool, err = h.repository.NodePools.GetByID(ctx, id, userCtx.Email)
+	}
+
 	if err != nil {
 		if err == models.ErrNodePoolNotFound {
 			c.JSON(http.StatusNotFound, utils.NewAPIError(
@@ -475,10 +566,14 @@ func (h *NodePoolHandler) DeleteNodePool(c *gin.Context) {
 		zap.String("nodepool_name", nodepool.Name),
 	)
 
-	c.JSON(http.StatusNoContent, nil)
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":     "nodepool deletion initiated",
+		"nodepool_id": id.String(),
+	})
 }
 
 // GetNodePoolStatus retrieves nodepool status information
+// Returns both aggregated K8s-like status and individual controller status reports
 func (h *NodePoolHandler) GetNodePoolStatus(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
@@ -493,7 +588,49 @@ func (h *NodePoolHandler) GetNodePoolStatus(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get nodepool controller status
+	// Get user context for access control
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
+		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
+			utils.ErrCodeUnauthorized,
+			"Authentication required",
+			"",
+		))
+		return
+	}
+
+	h.logger.Info("Getting nodepool status",
+		zap.String("nodepool_id", id.String()),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
+	)
+
+	// Get nodepool to retrieve aggregated status
+	nodepool, err := h.repository.NodePools.GetByID(ctx, id, userCtx.Email)
+	if err != nil {
+		h.logger.Error("Failed to get nodepool",
+			zap.String("nodepool_id", id.String()),
+			zap.Error(err),
+		)
+
+		if err.Error() == "nodepool not found" {
+			c.JSON(http.StatusNotFound, utils.NewAPIError(
+				utils.ErrCodeNotFound,
+				"NodePool not found",
+				"",
+			))
+		} else {
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to get nodepool",
+				err.Error(),
+			))
+		}
+		return
+	}
+
+	// Get individual controller status reports
 	controllerStatuses, err := h.repository.Status.ListNodePoolControllerStatus(ctx, id)
 	if err != nil {
 		h.logger.Error("Failed to get nodepool controller status",
@@ -502,15 +639,23 @@ func (h *NodePoolHandler) GetNodePoolStatus(c *gin.Context) {
 		)
 		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
 			utils.ErrCodeInternal,
-			"Failed to get nodepool status",
+			"Failed to get nodepool controller status",
 			err.Error(),
 		))
 		return
 	}
 
-	response := map[string]interface{}{
+	h.logger.Info("Retrieved nodepool status",
+		zap.String("nodepool_id", id.String()),
+		zap.Int("controller_count", len(controllerStatuses)),
+	)
+
+	// Return both aggregated status AND controller status (matching cluster pattern)
+	response := gin.H{
 		"nodepool_id":       id,
-		"controller_status": controllerStatuses,
+		"cluster_id":        nodepool.ClusterID,
+		"status":            nodepool.Status,    // Aggregated K8s-like status
+		"controller_status": controllerStatuses, // Individual controller reports
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -564,10 +709,10 @@ func (h *NodePoolHandler) UpdateNodePoolStatus(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
 			utils.ErrCodeUnauthorized,
 			"Authentication required",
@@ -577,7 +722,14 @@ func (h *NodePoolHandler) UpdateNodePoolStatus(c *gin.Context) {
 	}
 
 	// Verify nodepool exists
-	nodepool, err := h.repository.NodePools.GetByID(ctx, id, userEmail)
+	var nodepool *models.NodePool
+	if userCtx.IsController {
+		// Controllers can access any nodepool
+		nodepool, err = h.repository.NodePools.GetByIDInternal(ctx, id)
+	} else {
+		// Users can only access their own nodepools (via cluster ownership)
+		nodepool, err = h.repository.NodePools.GetByID(ctx, id, userCtx.Email)
+	}
 	if err != nil {
 		if err == models.ErrNodePoolNotFound {
 			c.JSON(http.StatusNotFound, utils.NewAPIError(

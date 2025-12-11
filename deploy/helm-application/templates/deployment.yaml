@@ -143,6 +143,11 @@ spec:
             configMapKeyRef:
               name: {{ include "cls-backend-application.fullname" . }}-config
               key: PUBSUB_CLUSTER_EVENTS_TOPIC
+        - name: PUBSUB_NODEPOOL_EVENTS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "cls-backend-application.fullname" . }}-config
+              key: PUBSUB_NODEPOOL_EVENTS_TOPIC
         - name: RECONCILIATION_ENABLED
           valueFrom:
             configMapKeyRef:

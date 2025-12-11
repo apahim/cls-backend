@@ -285,3 +285,89 @@ func (r *ReconciliationRepository) MarkReconciliationNeeded(ctx context.Context,
 
 	return nil
 }
+
+// FindNodePoolsNeedingReconciliation finds nodepools that need reconciliation
+func (r *ReconciliationRepository) FindNodePoolsNeedingReconciliation(ctx context.Context) ([]*models.NodePoolReconciliationTarget, error) {
+	query := `SELECT * FROM find_nodepools_needing_reconciliation()`
+
+	rows, err := r.client.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find nodepools needing reconciliation: %w", err)
+	}
+	defer rows.Close()
+
+	var targets []*models.NodePoolReconciliationTarget
+	for rows.Next() {
+		target := &models.NodePoolReconciliationTarget{}
+		if err := rows.Scan(
+			&target.NodePoolID,
+			&target.Reason,
+			&target.LastReconciledAt,
+			&target.NodePoolGeneration,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan nodepool reconciliation target: %w", err)
+		}
+		targets = append(targets, target)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating nodepool reconciliation targets: %w", err)
+	}
+
+	r.logger.Debug("Found nodepools needing reconciliation",
+		zap.Int("count", len(targets)))
+
+	return targets, nil
+}
+
+// UpdateNodePoolReconciliationSchedule updates the nodepool reconciliation schedule
+func (r *ReconciliationRepository) UpdateNodePoolReconciliationSchedule(ctx context.Context, nodepoolID uuid.UUID) error {
+	query := `SELECT update_nodepool_reconciliation_schedule($1)`
+
+	_, err := r.client.ExecContext(ctx, query, nodepoolID)
+	if err != nil {
+		return fmt.Errorf("failed to update nodepool reconciliation schedule: %w", err)
+	}
+
+	r.logger.Debug("Updated nodepool reconciliation schedule",
+		zap.String("nodepool_id", nodepoolID.String()))
+
+	return nil
+}
+
+// GetNodePoolReconciliationSchedule gets the nodepool reconciliation schedule
+func (r *ReconciliationRepository) GetNodePoolReconciliationSchedule(ctx context.Context, nodepoolID uuid.UUID) (*models.NodePoolReconciliationSchedule, error) {
+	query := `
+		SELECT id, nodepool_id, last_reconciled_at, next_reconcile_at,
+		       reconcile_interval, enabled, created_at, updated_at,
+		       healthy_interval, unhealthy_interval, adaptive_enabled,
+		       last_health_check, is_healthy
+		FROM nodepool_reconciliation_schedule
+		WHERE nodepool_id = $1`
+
+	schedule := &models.NodePoolReconciliationSchedule{}
+	err := r.client.QueryRowContext(ctx, query, nodepoolID).Scan(
+		&schedule.ID,
+		&schedule.NodePoolID,
+		&schedule.LastReconciledAt,
+		&schedule.NextReconcileAt,
+		&schedule.ReconcileInterval,
+		&schedule.Enabled,
+		&schedule.CreatedAt,
+		&schedule.UpdatedAt,
+		&schedule.HealthyInterval,
+		&schedule.UnhealthyInterval,
+		&schedule.AdaptiveEnabled,
+		&schedule.LastHealthCheck,
+		&schedule.IsHealthy,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, models.ErrReconciliationScheduleNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodepool reconciliation schedule: %w", err)
+	}
+
+	return schedule, nil
+}

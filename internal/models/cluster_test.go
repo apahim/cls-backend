@@ -267,7 +267,6 @@ func TestNodePool(t *testing.T) {
 		Generation:      1,
 		ResourceVersion: "v1",
 		Spec: NodePoolSpec{
-			ClusterName: "test-cluster",
 			Platform: NodePoolPlatformSpec{
 				Type: "GCP",
 				GCP: &NodePoolGCPSpec{
@@ -289,7 +288,6 @@ func TestNodePool(t *testing.T) {
 	// NodePool doesn't have status fields in current implementation
 
 	// Test nodepool spec
-	utils.AssertEqual(t, "test-cluster", nodepool.Spec.ClusterName, "Cluster name in spec")
 	utils.AssertEqual(t, "GCP", nodepool.Spec.Platform.Type, "Platform type")
 	utils.AssertNotNil(t, nodepool.Spec.Platform.GCP, "GCP spec should not be nil")
 	utils.AssertEqual(t, "n1-standard-4", nodepool.Spec.Platform.GCP.InstanceType, "Instance type")
@@ -299,7 +297,6 @@ func TestNodePool(t *testing.T) {
 
 func TestNodePoolSpec_Value(t *testing.T) {
 	spec := NodePoolSpec{
-		ClusterName: "test-cluster",
 		Platform: NodePoolPlatformSpec{
 			Type: "GCP",
 			GCP: &NodePoolGCPSpec{
@@ -320,7 +317,6 @@ func TestNodePoolSpec_Value(t *testing.T) {
 	var decoded NodePoolSpec
 	err = json.Unmarshal(jsonBytes, &decoded)
 	utils.AssertError(t, err, false, "Should be valid JSON")
-	utils.AssertEqual(t, spec.ClusterName, decoded.ClusterName, "Cluster name should match")
 	utils.AssertNotNil(t, decoded.Replicas, "Decoded replicas should not be nil")
 	utils.AssertEqual(t, *spec.Replicas, *decoded.Replicas, "Replicas should match")
 }

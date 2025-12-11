@@ -44,6 +44,44 @@ type ReconciliationEvent struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// NodePoolReconciliationSchedule represents a nodepool-centric reconciliation schedule
+type NodePoolReconciliationSchedule struct {
+	ID                int64      `json:"id" db:"id"`
+	NodePoolID        uuid.UUID  `json:"nodepool_id" db:"nodepool_id"`
+	LastReconciledAt  *time.Time `json:"last_reconciled_at" db:"last_reconciled_at"`
+	NextReconcileAt   *time.Time `json:"next_reconcile_at" db:"next_reconcile_at"`
+	ReconcileInterval string     `json:"reconcile_interval" db:"reconcile_interval"` // PostgreSQL INTERVAL as string
+	Enabled           bool       `json:"enabled" db:"enabled"`
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
+
+	// Health-aware interval configuration
+	HealthyInterval   string     `json:"healthy_interval" db:"healthy_interval"`     // PostgreSQL INTERVAL as string
+	UnhealthyInterval string     `json:"unhealthy_interval" db:"unhealthy_interval"` // PostgreSQL INTERVAL as string
+	AdaptiveEnabled   bool       `json:"adaptive_enabled" db:"adaptive_enabled"`
+	LastHealthCheck   *time.Time `json:"last_health_check" db:"last_health_check"`
+	IsHealthy         *bool      `json:"is_healthy" db:"is_healthy"` // NULL = unknown, true = healthy, false = unhealthy
+}
+
+// NodePoolReconciliationTarget represents a nodepool that needs reconciliation
+type NodePoolReconciliationTarget struct {
+	NodePoolID         uuid.UUID  `json:"nodepool_id" db:"nodepool_id"`
+	Reason             string     `json:"reason" db:"reason"`
+	LastReconciledAt   *time.Time `json:"last_reconciled_at" db:"last_reconciled_at"`
+	NodePoolGeneration int64      `json:"nodepool_generation" db:"nodepool_generation"`
+}
+
+// NodePoolReconciliationEvent represents an event published for nodepool reconciliation
+type NodePoolReconciliationEvent struct {
+	Type       string                 `json:"type"`
+	ClusterID  string                 `json:"cluster_id"`
+	NodePoolID string                 `json:"nodepool_id"`
+	Reason     string                 `json:"reason"`
+	Generation int64                  `json:"generation"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+}
+
 // ReconciliationConfig represents reconciliation configuration
 type ReconciliationConfig struct {
 	Enabled         bool          `json:"enabled"`

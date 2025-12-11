@@ -11,15 +11,20 @@ import (
 
 // NodePool represents a node pool in the database
 type NodePool struct {
-	ID              uuid.UUID    `json:"id" db:"id"`
-	ClusterID       uuid.UUID    `json:"cluster_id" db:"cluster_id"`
-	Name            string       `json:"name" db:"name"`
-	Generation      int64        `json:"generation" db:"generation"`
-	ResourceVersion string       `json:"resource_version" db:"resource_version"`
-	Spec            NodePoolSpec `json:"spec" db:"spec"`
-	CreatedAt       time.Time    `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at" db:"updated_at"`
-	DeletedAt       *time.Time   `json:"deleted_at,omitempty" db:"deleted_at"`
+	ID              uuid.UUID           `json:"id" db:"id"`
+	ClusterID       uuid.UUID           `json:"cluster_id" db:"cluster_id"`
+	Name            string              `json:"name" db:"name"`
+	CreatedBy       string              `json:"created_by,omitempty" db:"created_by"` // User who created the nodepool
+	Generation      int64               `json:"generation" db:"generation"`
+	ResourceVersion string              `json:"resource_version" db:"resource_version"`
+	Spec            NodePoolSpec        `json:"spec" db:"spec"`
+	Status          *NodePoolStatusInfo `json:"status,omitempty" db:"status"` // Aggregated Kubernetes-like status
+	CreatedAt       time.Time           `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time           `json:"updated_at" db:"updated_at"`
+	DeletedAt       *time.Time          `json:"deleted_at,omitempty" db:"deleted_at"`
+
+	// Status management (not serialized to JSON)
+	StatusDirty bool `json:"-" db:"status_dirty"` // Triggers status recalculation when TRUE
 }
 
 // NodePoolSpec represents the node pool specification
@@ -28,7 +33,6 @@ type NodePoolSpec struct {
 	Management       NodePoolManagement   `json:"management"`
 	Platform         NodePoolPlatformSpec `json:"platform"`
 	Release          NodePoolReleaseSpec  `json:"release"`
-	ClusterName      string               `json:"clusterName"`
 	NodeDrainTimeout string               `json:"nodeDrainTimeout,omitempty"`
 }
 
@@ -88,7 +92,43 @@ type NodePoolReleaseSpec struct {
 	Version string `json:"version"`
 }
 
-// NodePoolStatus represents the node pool status
+// NodePoolStatusInfo represents Kubernetes-like status for nodepools
+// This structure mirrors ClusterStatusInfo for consistent status aggregation
+type NodePoolStatusInfo struct {
+	ObservedGeneration int64       `json:"observedGeneration"` // Last generation processed by controllers
+	Conditions         []Condition `json:"conditions"`         // Ready, Available conditions
+	Phase              string      `json:"phase,omitempty"`    // Pending, Progressing, Ready, Failed
+	Message            string      `json:"message,omitempty"`  // Human-readable status message
+	Reason             string      `json:"reason,omitempty"`   // Machine-readable reason code
+	LastUpdateTime     time.Time   `json:"lastUpdateTime"`     // When status was last calculated
+}
+
+// Value implements driver.Valuer for NodePoolStatusInfo (database serialization)
+func (npsi NodePoolStatusInfo) Value() (driver.Value, error) {
+	return json.Marshal(npsi)
+}
+
+// Scan implements sql.Scanner for NodePoolStatusInfo (database deserialization)
+func (npsi *NodePoolStatusInfo) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("cannot scan %T into NodePoolStatusInfo", value)
+	}
+	return json.Unmarshal(bytes, npsi)
+}
+
+// ToJSON converts NodePoolStatusInfo to JSON bytes for database storage
+func (npsi *NodePoolStatusInfo) ToJSON() ([]byte, error) {
+	return json.Marshal(npsi)
+}
+
+// NodePoolStatus - DEPRECATED: Use NodePoolStatusInfo instead
+// This struct is kept for backward compatibility only. New code should use
+// NodePoolStatusInfo which provides Kubernetes-like status aggregation with
+// Ready/Available conditions, phase tracking, and generation awareness.
 type NodePoolStatus struct {
 	Phase               string      `json:"phase"`
 	Health              string      `json:"health"`

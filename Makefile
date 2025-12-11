@@ -1,11 +1,12 @@
 # Variables
 PROJECT_ID ?= your-project-id
-IMAGE_NAME = cls-backend
+IMAGE_REGISTRY ?= gcr.io
+IMAGE_NAME ?= cls-backend
 IMAGE_TAG ?= latest
-FULL_IMAGE_NAME = gcr.io/$(PROJECT_ID)/$(IMAGE_NAME):$(IMAGE_TAG)
+FULL_IMAGE_NAME = $(IMAGE_REGISTRY)/$(PROJECT_ID)/$(IMAGE_NAME):$(IMAGE_TAG)
 
 # Go variables
-GO_VERSION = 1.21
+GO_VERSION = 1.23
 MAIN_PACKAGE = ./cmd/backend-api
 BINARY_NAME = backend-api
 
@@ -62,7 +63,7 @@ build-all:
 .PHONY: test
 test:
 	@echo "Running comprehensive test suite..."
-	@./scripts/run-tests.sh
+	@go test -v -race ./...
 
 # Run unit tests only (no external dependencies)
 .PHONY: test-unit
@@ -105,19 +106,19 @@ test-package:
 		exit 1; \
 	fi
 	@echo "Running tests for package: $(PKG)"
-	@./scripts/run-tests.sh --package $(PKG)
+	@go test -v -race $(PKG)
 
 # Run tests without race detector (faster)
 .PHONY: test-fast
 test-fast:
 	@echo "Running tests without race detector..."
-	@./scripts/run-tests.sh --no-race
+	@go test -v ./...
 
 # Run tests without database (CI environments)
 .PHONY: test-no-db
 test-no-db:
 	@echo "Running tests without database dependencies..."
-	@SKIP_DB_TESTS=true ./scripts/run-tests.sh
+	@SKIP_DB_TESTS=true go test -v ./...
 
 # Run benchmarks
 .PHONY: benchmark
@@ -174,16 +175,16 @@ generate:
 .PHONY: docker-build
 docker-build:
 	@echo "Building Docker image..."
-	docker build \
+	podman build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
 		-t $(FULL_IMAGE_NAME) .
 
-.PHONY: docker-push
+.PHONY: podman-push
 docker-push: docker-build
 	@echo "Pushing Docker image..."
-	docker push $(FULL_IMAGE_NAME)
+	podman push $(FULL_IMAGE_NAME)
 
 .PHONY: cloud-build
 cloud-build:

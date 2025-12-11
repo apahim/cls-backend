@@ -500,3 +500,441 @@ func (a *StatusAggregator) EnrichClustersWithStatus(ctx context.Context, cluster
 
 	return nil
 }
+
+// =============================================================================
+// NODEPOOL STATUS AGGREGATION
+// =============================================================================
+// The following methods provide status aggregation for nodepools, mirroring
+// the cluster status aggregation pattern above. They compute Kubernetes-like
+// Ready/Available conditions from nodepool controller status reports.
+
+// NodePoolStatusAggregationResult contains the computed nodepool status information
+type NodePoolStatusAggregationResult struct {
+	Status            *models.NodePoolStatusInfo `json:"status"`
+	TotalControllers  int                        `json:"total_controllers"`
+	ReadyControllers  int                        `json:"ready_controllers"`
+	FailedControllers int                        `json:"failed_controllers"`
+	HasErrors         bool                       `json:"has_errors"`
+	Generation        int64                      `json:"generation"`
+}
+
+// CalculateNodePoolStatus performs real-time status aggregation for a nodepool
+// This mirrors the CalculateClusterStatus logic but works with nodepool_controller_status
+func (a *StatusAggregator) CalculateNodePoolStatus(ctx context.Context, nodepool *models.NodePool) (*NodePoolStatusAggregationResult, error) {
+	if nodepool == nil {
+		return nil, fmt.Errorf("nodepool cannot be nil")
+	}
+
+	a.logger.Debug("Calculating nodepool status",
+		zap.String("nodepool_id", nodepool.ID.String()),
+		zap.Int64("generation", nodepool.Generation),
+	)
+
+	// Get controller status counts for the current generation only
+	stats, err := a.getNodePoolControllerStats(ctx, nodepool.ID, nodepool.Generation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodepool controller stats: %w", err)
+	}
+
+	// Apply aggregation logic (same logic as cluster aggregation)
+	result := a.applyNodePoolAggregationRules(stats, nodepool.Generation)
+
+	a.logger.Debug("Calculated nodepool status",
+		zap.String("nodepool_id", nodepool.ID.String()),
+		zap.String("phase", result.Status.Phase),
+		zap.String("reason", result.Status.Reason),
+		zap.Int("total_controllers", result.TotalControllers),
+		zap.Int("ready_controllers", result.ReadyControllers),
+	)
+
+	return result, nil
+}
+
+// getNodePoolControllerStats queries nodepool_controller_status for the current generation
+func (a *StatusAggregator) getNodePoolControllerStats(ctx context.Context, nodepoolID uuid.UUID, generation int64) (*ControllerStats, error) {
+	query := `
+		SELECT
+			COUNT(*) AS total,
+			COUNT(CASE WHEN
+				(
+					SELECT COUNT(*)
+					FROM jsonb_array_elements(conditions) AS condition
+					WHERE condition->>'type' = 'Available' AND condition->>'status' = 'True'
+				) > 0
+			THEN 1 END) AS ready,
+			COUNT(CASE WHEN last_error IS NOT NULL THEN 1 END) AS errors,
+			MIN(updated_at) AS earliest_report_time,
+			COUNT(CASE WHEN updated_at > NOW() - INTERVAL '5 minutes' THEN 1 END) > 0 AS has_recent_activity
+		FROM nodepool_controller_status
+		WHERE nodepool_id = $1 AND observed_generation = $2`
+
+	var stats ControllerStats
+	var earliestReportTime *time.Time
+
+	a.logger.Debug("Executing nodepool controller stats query",
+		zap.String("nodepool_id", nodepoolID.String()),
+		zap.Int64("generation", generation),
+	)
+
+	err := a.client.QueryRowContext(ctx, query, nodepoolID, generation).Scan(
+		&stats.TotalCount,
+		&stats.ReadyCount,
+		&stats.ErrorCount,
+		&earliestReportTime,
+		&stats.HasRecentActivity,
+	)
+
+	if err != nil {
+		a.logger.Error("Failed to get nodepool controller stats",
+			zap.String("nodepool_id", nodepoolID.String()),
+			zap.Int64("generation", generation),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to query nodepool controller stats: %w", err)
+	}
+
+	stats.Generation = generation
+	stats.EarliestControllerReportTime = earliestReportTime
+
+	a.logger.Debug("NodePool controller stats retrieved",
+		zap.String("nodepool_id", nodepoolID.String()),
+		zap.Int64("generation", generation),
+		zap.Int("total", stats.TotalCount),
+		zap.Int("ready", stats.ReadyCount),
+		zap.Int("errors", stats.ErrorCount),
+		zap.Bool("has_recent_activity", stats.HasRecentActivity),
+	)
+
+	return &stats, nil
+}
+
+// applyNodePoolAggregationRules applies Kubernetes-like status aggregation logic for nodepools
+// This mirrors applyAggregationRules but with nodepool-specific messages
+func (a *StatusAggregator) applyNodePoolAggregationRules(stats *ControllerStats, generation int64) *NodePoolStatusAggregationResult {
+	now := time.Now()
+
+	var (
+		phase              string
+		reason             string
+		message            string
+		readyCondition     models.Condition
+		availableCondition models.Condition
+	)
+
+	failedCount := stats.TotalCount - stats.ReadyCount
+	hasErrors := stats.ErrorCount > 0
+
+	// Apply Kubernetes-like aggregation logic (same as clusters)
+	if stats.TotalCount == 0 {
+		// No controllers have reported status yet
+		phase = "Pending"
+		reason = "NoControllers"
+		message = "Waiting for controllers to report status"
+
+		readyCondition = models.Condition{
+			Type:               "Ready",
+			Status:             "False",
+			LastTransitionTime: now,
+			Reason:             "ControllersNotReady",
+			Message:            "No controllers have reported status yet",
+		}
+
+		availableCondition = models.Condition{
+			Type:               "Available",
+			Status:             "False",
+			LastTransitionTime: now,
+			Reason:             "ControllersNotAvailable",
+			Message:            "No controllers are available yet",
+		}
+
+	} else if stats.ReadyCount == stats.TotalCount && !hasErrors {
+		// All controllers ready and no errors
+		phase = "Ready"
+		reason = "AllControllersReady"
+		message = fmt.Sprintf("NodePool is ready with %d controllers operational", stats.TotalCount)
+
+		readyCondition = models.Condition{
+			Type:               "Ready",
+			Status:             "True",
+			LastTransitionTime: now,
+			Reason:             "AllControllersReady",
+			Message:            fmt.Sprintf("All %d controllers are ready", stats.TotalCount),
+		}
+
+		availableCondition = models.Condition{
+			Type:               "Available",
+			Status:             "True",
+			LastTransitionTime: now,
+			Reason:             "AllControllersAvailable",
+			Message:            fmt.Sprintf("All %d controllers are available", stats.TotalCount),
+		}
+
+	} else if stats.ReadyCount > 0 {
+		// Some controllers ready
+		phase = "Progressing"
+
+		readyCondition = models.Condition{
+			Type:               "Ready",
+			Status:             "False",
+			LastTransitionTime: now,
+			Reason:             "PartiallyReady",
+			Message:            fmt.Sprintf("%d of %d controllers are ready", stats.ReadyCount, stats.TotalCount),
+		}
+
+		if hasErrors {
+			reason = "ControllersWithErrors"
+			message = fmt.Sprintf("NodePool is progressing but some controllers have errors (%d/%d ready)", stats.ReadyCount, stats.TotalCount)
+
+			availableCondition = models.Condition{
+				Type:               "Available",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "PartiallyAvailableWithErrors",
+				Message:            fmt.Sprintf("Some controllers have errors (%d available of %d)", stats.ReadyCount, stats.TotalCount),
+			}
+		} else {
+			reason = "PartialProgress"
+			message = fmt.Sprintf("NodePool is progressing (%d/%d controllers ready)", stats.ReadyCount, stats.TotalCount)
+
+			availableCondition = models.Condition{
+				Type:               "Available",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "PartiallyAvailable",
+				Message:            fmt.Sprintf("Controllers are still becoming available (%d available of %d)", stats.ReadyCount, stats.TotalCount),
+			}
+		}
+
+	} else {
+		// No controllers ready - use timeout-aware logic
+		withinGracePeriod := a.isWithinGracePeriod(stats)
+		hasProgress := stats.HasRecentActivity || hasErrors
+
+		if withinGracePeriod || hasProgress {
+			// Controllers are working but not ready yet
+			phase = "Progressing"
+
+			if withinGracePeriod {
+				reason = "ControllersProvisioning"
+				var timeRemaining string
+				if stats.EarliestControllerReportTime != nil {
+					elapsed := time.Since(*stats.EarliestControllerReportTime)
+					remaining := time.Duration(DefaultGracePeriodMinutes)*time.Minute - elapsed
+					if remaining > 0 {
+						timeRemaining = fmt.Sprintf(" (%d minutes remaining)", int(remaining.Minutes()))
+					}
+				}
+				message = fmt.Sprintf("Controllers are provisioning nodepool resources%s (%d controllers working)", timeRemaining, stats.TotalCount)
+			} else {
+				reason = "ControllersShowingProgress"
+				message = fmt.Sprintf("Controllers are actively working but not yet ready (%d controllers showing progress)", stats.TotalCount)
+			}
+
+			readyCondition = models.Condition{
+				Type:               "Ready",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersNotYetReady",
+				Message:            fmt.Sprintf("Controllers are still working (%d of %d controllers)", stats.TotalCount, stats.TotalCount),
+			}
+
+			availableCondition = models.Condition{
+				Type:               "Available",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersBecomingAvailable",
+				Message:            fmt.Sprintf("Controllers are becoming available (%d working)", stats.TotalCount),
+			}
+		} else {
+			// Timeout exceeded with no progress
+			phase = "Failed"
+			reason = "ControllerTimeout"
+
+			timeoutDuration := "20+ minutes"
+			if stats.EarliestControllerReportTime != nil {
+				elapsed := time.Since(*stats.EarliestControllerReportTime)
+				timeoutDuration = fmt.Sprintf("%.0f minutes", elapsed.Minutes())
+			}
+
+			message = fmt.Sprintf("Controllers failed to become ready after %s with no progress (%d controllers timed out)", timeoutDuration, stats.TotalCount)
+
+			readyCondition = models.Condition{
+				Type:               "Ready",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersTimedOut",
+				Message:            fmt.Sprintf("Controllers timed out after %s", timeoutDuration),
+			}
+
+			availableCondition = models.Condition{
+				Type:               "Available",
+				Status:             "False",
+				LastTransitionTime: now,
+				Reason:             "ControllersTimedOut",
+				Message:            fmt.Sprintf("No controllers became available after %s", timeoutDuration),
+			}
+		}
+	}
+
+	// Build the Kubernetes-like status block
+	status := &models.NodePoolStatusInfo{
+		ObservedGeneration: generation,
+		Conditions:         []models.Condition{readyCondition, availableCondition},
+		Phase:              phase,
+		Message:            message,
+		Reason:             reason,
+		LastUpdateTime:     now,
+	}
+
+	return &NodePoolStatusAggregationResult{
+		Status:            status,
+		TotalControllers:  stats.TotalCount,
+		ReadyControllers:  stats.ReadyCount,
+		FailedControllers: failedCount,
+		HasErrors:         hasErrors,
+		Generation:        generation,
+	}
+}
+
+// EnrichNodePoolWithStatus calculates and applies status to a nodepool (only if dirty)
+func (a *StatusAggregator) EnrichNodePoolWithStatus(ctx context.Context, nodepool *models.NodePool) error {
+	if nodepool == nil {
+		return fmt.Errorf("nodepool cannot be nil")
+	}
+
+	// If status is not dirty, use the cached status from database
+	if !nodepool.StatusDirty {
+		a.logger.Debug("NodePool status is clean, using cached status",
+			zap.String("nodepool_id", nodepool.ID.String()),
+		)
+		return nil // Status is already current, no need to recalculate
+	}
+
+	a.logger.Debug("NodePool status is dirty, recalculating",
+		zap.String("nodepool_id", nodepool.ID.String()),
+		zap.Int64("generation", nodepool.Generation),
+	)
+
+	// Status is dirty, need to recalculate and cache
+	result, err := a.CalculateNodePoolStatus(ctx, nodepool)
+	if err != nil {
+		a.logger.Error("Failed to calculate nodepool status",
+			zap.String("nodepool_id", nodepool.ID.String()),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to calculate status for nodepool %s: %w", nodepool.ID, err)
+	}
+
+	// Apply the calculated status to the nodepool object
+	nodepool.Status = result.Status
+
+	// Update the database with cached results and mark as clean
+	err = a.updateNodePoolStatusInDB(ctx, nodepool.ID, result)
+	if err != nil {
+		a.logger.Warn("Failed to cache nodepool status in database",
+			zap.String("nodepool_id", nodepool.ID.String()),
+			zap.Error(err))
+		// Don't fail the request - we have the calculated status in memory
+	} else {
+		// Mark as clean now that we've cached the results
+		nodepool.StatusDirty = false
+		a.logger.Debug("Successfully cached nodepool status and marked as clean",
+			zap.String("nodepool_id", nodepool.ID.String()),
+		)
+	}
+
+	a.logger.Debug("Enriched nodepool with calculated status",
+		zap.String("nodepool_id", nodepool.ID.String()),
+		zap.String("phase", result.Status.Phase),
+		zap.String("reason", result.Status.Reason),
+		zap.Int("conditions", len(result.Status.Conditions)),
+	)
+
+	return nil
+}
+
+// updateNodePoolStatusInDB caches the calculated status in the database and marks as clean
+func (a *StatusAggregator) updateNodePoolStatusInDB(ctx context.Context, nodepoolID uuid.UUID, result *NodePoolStatusAggregationResult) error {
+	// Convert the status to JSON for storage
+	statusJSON, err := result.Status.ToJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal status to JSON: %w", err)
+	}
+
+	query := `
+		UPDATE nodepools
+		SET
+			status = $2,
+			status_dirty = FALSE,
+			updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	result_db, err := a.client.ExecContext(ctx, query,
+		nodepoolID,
+		statusJSON,
+	)
+
+	if err != nil {
+		a.logger.Error("Failed to update nodepool status in database",
+			zap.String("nodepool_id", nodepoolID.String()),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to update nodepool status: %w", err)
+	}
+
+	rowsAffected, err := result_db.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("nodepool not found or already deleted")
+	}
+
+	a.logger.Debug("Successfully cached nodepool status in database",
+		zap.String("nodepool_id", nodepoolID.String()),
+		zap.String("phase", result.Status.Phase),
+		zap.String("reason", result.Status.Reason),
+	)
+
+	return nil
+}
+
+// EnrichNodePoolsWithStatus calculates and applies real-time status to multiple nodepools
+func (a *StatusAggregator) EnrichNodePoolsWithStatus(ctx context.Context, nodepools []*models.NodePool) error {
+	if len(nodepools) == 0 {
+		return nil
+	}
+
+	a.logger.Debug("Enriching multiple nodepools with real-time status",
+		zap.Int("nodepool_count", len(nodepools)),
+	)
+
+	var enrichmentErrors []error
+
+	for _, nodepool := range nodepools {
+		if err := a.EnrichNodePoolWithStatus(ctx, nodepool); err != nil {
+			a.logger.Error("Failed to enrich nodepool with status",
+				zap.String("nodepool_id", nodepool.ID.String()),
+				zap.Error(err),
+			)
+			enrichmentErrors = append(enrichmentErrors, err)
+			// Continue with other nodepools even if one fails
+		}
+	}
+
+	if len(enrichmentErrors) > 0 {
+		a.logger.Warn("Some nodepools failed status enrichment",
+			zap.Int("failed_count", len(enrichmentErrors)),
+			zap.Int("total_count", len(nodepools)),
+		)
+		// Return the first error but log all of them
+		return fmt.Errorf("failed to enrich %d out of %d nodepools with status: %w", len(enrichmentErrors), len(nodepools), enrichmentErrors[0])
+	}
+
+	a.logger.Debug("Successfully enriched all nodepools with real-time status",
+		zap.Int("nodepool_count", len(nodepools)),
+	)
+
+	return nil
+}

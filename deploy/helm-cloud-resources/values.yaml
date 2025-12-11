@@ -40,8 +40,9 @@ database:
 
 # Pub/Sub Configuration
 pubsub:
-  # Topic name (must match application configuration)
+  # Topic names (must match application configuration)
   clusterEventsTopic: "cluster-events"
+  nodepoolEventsTopic: "nodepool-events"
 
 # IAM Service Account Configuration
 serviceAccount:
