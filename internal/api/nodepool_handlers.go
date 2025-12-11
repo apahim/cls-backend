@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/apahim/cls-backend/internal/database"
+	"github.com/apahim/cls-backend/internal/middleware"
 	"github.com/apahim/cls-backend/internal/models"
 	"github.com/apahim/cls-backend/internal/pubsub"
 	"github.com/apahim/cls-backend/internal/utils"
@@ -293,10 +294,10 @@ func (h *NodePoolHandler) GetNodePool(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
 			utils.ErrCodeUnauthorized,
 			"Authentication required",
@@ -305,7 +306,21 @@ func (h *NodePoolHandler) GetNodePool(c *gin.Context) {
 		return
 	}
 
-	nodepool, err := h.repository.NodePools.GetByID(ctx, id, userEmail)
+	h.logger.Info("Getting nodepool",
+		zap.String("nodepool_id", idParam),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
+	)
+
+	var nodepool *models.NodePool
+	if userCtx.IsController {
+		// Controllers can access any nodepool
+		nodepool, err = h.repository.NodePools.GetByIDInternal(ctx, id)
+	} else {
+		// Users can only access their own nodepools (via cluster ownership)
+		nodepool, err = h.repository.NodePools.GetByID(ctx, id, userCtx.Email)
+	}
+
 	if err != nil {
 		if err == models.ErrNodePoolNotFound {
 			c.JSON(http.StatusNotFound, utils.NewAPIError(
@@ -623,10 +638,10 @@ func (h *NodePoolHandler) UpdateNodePoolStatus(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get user email from context for client isolation
-	userEmail := c.GetString("user_email")
-	if userEmail == "" {
-		h.logger.Error("No user email found in context")
+	// Get user context from middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
 		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
 			utils.ErrCodeUnauthorized,
 			"Authentication required",
@@ -636,7 +651,14 @@ func (h *NodePoolHandler) UpdateNodePoolStatus(c *gin.Context) {
 	}
 
 	// Verify nodepool exists
-	nodepool, err := h.repository.NodePools.GetByID(ctx, id, userEmail)
+	var nodepool *models.NodePool
+	if userCtx.IsController {
+		// Controllers can access any nodepool
+		nodepool, err = h.repository.NodePools.GetByIDInternal(ctx, id)
+	} else {
+		// Users can only access their own nodepools (via cluster ownership)
+		nodepool, err = h.repository.NodePools.GetByID(ctx, id, userCtx.Email)
+	}
 	if err != nil {
 		if err == models.ErrNodePoolNotFound {
 			c.JSON(http.StatusNotFound, utils.NewAPIError(
