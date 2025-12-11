@@ -553,6 +553,7 @@ func (h *NodePoolHandler) DeleteNodePool(c *gin.Context) {
 }
 
 // GetNodePoolStatus retrieves nodepool status information
+// Returns both aggregated K8s-like status and individual controller status reports
 func (h *NodePoolHandler) GetNodePoolStatus(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
@@ -567,7 +568,49 @@ func (h *NodePoolHandler) GetNodePoolStatus(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get nodepool controller status
+	// Get user context for access control
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		h.logger.Error("No user context found")
+		c.JSON(http.StatusUnauthorized, utils.NewAPIError(
+			utils.ErrCodeUnauthorized,
+			"Authentication required",
+			"",
+		))
+		return
+	}
+
+	h.logger.Info("Getting nodepool status",
+		zap.String("nodepool_id", id.String()),
+		zap.String("user_email", userCtx.Email),
+		zap.Bool("is_controller", userCtx.IsController),
+	)
+
+	// Get nodepool to retrieve aggregated status
+	nodepool, err := h.repository.NodePools.GetByID(ctx, id, userCtx.Email)
+	if err != nil {
+		h.logger.Error("Failed to get nodepool",
+			zap.String("nodepool_id", id.String()),
+			zap.Error(err),
+		)
+
+		if err.Error() == "nodepool not found" {
+			c.JSON(http.StatusNotFound, utils.NewAPIError(
+				utils.ErrCodeNotFound,
+				"NodePool not found",
+				"",
+			))
+		} else {
+			c.JSON(http.StatusInternalServerError, utils.NewAPIError(
+				utils.ErrCodeInternal,
+				"Failed to get nodepool",
+				err.Error(),
+			))
+		}
+		return
+	}
+
+	// Get individual controller status reports
 	controllerStatuses, err := h.repository.Status.ListNodePoolControllerStatus(ctx, id)
 	if err != nil {
 		h.logger.Error("Failed to get nodepool controller status",
@@ -576,15 +619,23 @@ func (h *NodePoolHandler) GetNodePoolStatus(c *gin.Context) {
 		)
 		c.JSON(http.StatusInternalServerError, utils.NewAPIError(
 			utils.ErrCodeInternal,
-			"Failed to get nodepool status",
+			"Failed to get nodepool controller status",
 			err.Error(),
 		))
 		return
 	}
 
-	response := map[string]interface{}{
+	h.logger.Info("Retrieved nodepool status",
+		zap.String("nodepool_id", id.String()),
+		zap.Int("controller_count", len(controllerStatuses)),
+	)
+
+	// Return both aggregated status AND controller status (matching cluster pattern)
+	response := gin.H{
 		"nodepool_id":       id,
-		"controller_status": controllerStatuses,
+		"cluster_id":        nodepool.ClusterID,
+		"status":            nodepool.Status,    // Aggregated K8s-like status
+		"controller_status": controllerStatuses, // Individual controller reports
 	}
 
 	c.JSON(http.StatusOK, response)
