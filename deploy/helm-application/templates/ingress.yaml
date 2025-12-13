@@ -1,4 +1,25 @@
 {{- if .Values.ingress.enabled -}}
+{{- if .Values.ingress.backendConfig.enabled }}
+# GCP BackendConfig for custom health check configuration
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "cls-backend-application.fullname" . }}-healthcheck
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "cls-backend-application.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend-config
+spec:
+  healthCheck:
+    checkIntervalSec: {{ .Values.ingress.backendConfig.healthCheck.checkIntervalSec | default 10 }}
+    timeoutSec: {{ .Values.ingress.backendConfig.healthCheck.timeoutSec | default 5 }}
+    healthyThreshold: {{ .Values.ingress.backendConfig.healthCheck.healthyThreshold | default 1 }}
+    unhealthyThreshold: {{ .Values.ingress.backendConfig.healthCheck.unhealthyThreshold | default 3 }}
+    type: {{ .Values.ingress.backendConfig.healthCheck.type | default "HTTP" }}
+    requestPath: {{ .Values.ingress.backendConfig.healthCheck.requestPath | default "/health" }}
+    port: {{ .Values.ingress.backendConfig.healthCheck.port | default 8080 }}
+---
+{{- end }}
 {{- if .Values.ingress.managedCertificate.enabled }}
 # GCP Managed Certificate for automatic TLS certificate provisioning
 apiVersion: networking.gke.io/v1
