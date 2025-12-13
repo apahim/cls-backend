@@ -41,6 +41,11 @@ service:
   type: ClusterIP
   port: 80
   targetPort: 8080
+  # Service annotations (optional)
+  # Example for GCP BackendConfig:
+  # annotations:
+  #   cloud.google.com/backend-config: '{"default": "cls-backend-healthcheck"}'
+  annotations: {}
 
 # Ingress configuration for external access
 ingress:
@@ -66,6 +71,26 @@ ingress:
   # NOTE: Certificate provisioning can take 10-20 minutes after initial deployment
   managedCertificate:
     enabled: false
+  # GCP BackendConfig for custom load balancer health checks (GKE-specific feature)
+  # When enabled, creates a BackendConfig resource with custom health check settings
+  # This is required for proper GCP load balancer health checks when using non-root paths
+  backendConfig:
+    enabled: false
+    healthCheck:
+      # Health check interval in seconds
+      checkIntervalSec: 10
+      # Health check timeout in seconds
+      timeoutSec: 5
+      # Number of successful checks before marking healthy
+      healthyThreshold: 1
+      # Number of failed checks before marking unhealthy
+      unhealthyThreshold: 3
+      # Health check type (HTTP or HTTPS)
+      type: "HTTP"
+      # Path to probe for health checks
+      requestPath: "/health"
+      # Port to probe (should match container port)
+      port: 8080
 
 # Database configuration (auto-discovered from cloud-resources chart)
 database:
