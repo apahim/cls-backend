@@ -93,8 +93,9 @@ type WorkloadIdentityConfig struct {
 
 // WIFServiceAccountsRef represents GCP service account references for WIF
 type WIFServiceAccountsRef struct {
-	NodePoolEmail     string `json:"nodePoolEmail"`
-	ControlPlaneEmail string `json:"controlPlaneEmail"`
+	NodePoolEmail        string `json:"nodePoolEmail"`
+	ControlPlaneEmail    string `json:"controlPlaneEmail"`
+	CloudControllerEmail string `json:"cloudControllerEmail"`
 }
 
 // ReleaseSpec represents the OpenShift release configuration
