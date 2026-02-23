@@ -132,6 +132,12 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 		return
 	}
 
+	// Validate infraID for GCP resource naming constraints
+	if err := req.ValidateGCPInfraID(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Get user context from middleware
 	userCtx, exists := middleware.GetUserContext(c)
 	if !exists {

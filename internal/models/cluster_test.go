@@ -295,6 +295,113 @@ func TestNodePool(t *testing.T) {
 	utils.AssertEqual(t, int32(3), *nodepool.Spec.Replicas, "Replicas count")
 }
 
+func TestValidateGCPInfraID(t *testing.T) {
+	tests := []struct {
+		name      string
+		infraID   string
+		platform  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:     "valid infra ID",
+			infraID:  "my-infra",
+			platform: "GCP",
+			wantErr:  false,
+		},
+		{
+			name:     "valid single char",
+			infraID:  "a",
+			platform: "GCP",
+			wantErr:  false,
+		},
+		{
+			name:     "valid with digits",
+			infraID:  "my-cluster-01",
+			platform: "GCP",
+			wantErr:  false,
+		},
+		{
+			name:     "valid max length",
+			infraID:  "aaaaaaaaaaaaaaa", // 15 chars
+			platform: "GCP",
+			wantErr:  false,
+		},
+		{
+			name:      "starts with digit",
+			infraID:   "1my-infra",
+			platform:  "GCP",
+			wantErr:   true,
+			errSubstr: "must start with a lowercase letter",
+		},
+		{
+			name:      "UUID starting with digit",
+			infraID:   "04e6fe60",
+			platform:  "GCP",
+			wantErr:   true,
+			errSubstr: "must start with a lowercase letter",
+		},
+		{
+			name:      "contains uppercase",
+			infraID:   "My-Infra",
+			platform:  "GCP",
+			wantErr:   true,
+			errSubstr: "must start with a lowercase letter",
+		},
+		{
+			name:      "contains underscore",
+			infraID:   "my_infra",
+			platform:  "GCP",
+			wantErr:   true,
+			errSubstr: "must start with a lowercase letter",
+		},
+		{
+			name:      "too long",
+			infraID:   "aaaaaaaaaaaaaaaa", // 16 chars
+			platform:  "GCP",
+			wantErr:   true,
+			errSubstr: "must be 15 characters or less",
+		},
+		{
+			name:      "empty",
+			infraID:   "",
+			platform:  "GCP",
+			wantErr:   true,
+			errSubstr: "must start with a lowercase letter",
+		},
+		{
+			name:     "non-GCP platform skips pattern check",
+			infraID:  "1starts-with-digit",
+			platform: "AWS",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ClusterCreateRequest{
+				Name: "test-cluster",
+				Spec: ClusterSpec{
+					InfraID: tt.infraID,
+					Platform: PlatformSpec{
+						Type: tt.platform,
+					},
+				},
+			}
+
+			err := req.ValidateGCPInfraID()
+			if tt.wantErr {
+				utils.AssertError(t, err, true, "should return error")
+				if tt.errSubstr != "" {
+					utils.AssertContains(t, err.Error(), tt.errSubstr, "error message")
+				}
+			} else {
+				utils.AssertError(t, err, false, "should not return error")
+			}
+		})
+	}
+}
+
 func TestNodePoolSpec_Value(t *testing.T) {
 	spec := NodePoolSpec{
 		Platform: NodePoolPlatformSpec{
