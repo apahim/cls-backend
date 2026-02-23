@@ -4,10 +4,22 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const (
+	// MaxInfraIDLength is the maximum allowed length for an infrastructure ID.
+	MaxInfraIDLength = 15
+
+	// GCPInfraIDPattern is the regex pattern for valid GCP resource names.
+	// Must start with a lowercase letter, followed by lowercase letters, digits, or hyphens.
+	GCPInfraIDPattern = `^[a-z][-a-z0-9]*$`
+)
+
+var gcpInfraIDRegex = regexp.MustCompile(GCPInfraIDPattern)
 
 // Status represents the status of a resource
 type Status string
@@ -281,6 +293,33 @@ type ClusterCreateRequest struct {
 	Name            string      `json:"name" binding:"required"`
 	TargetProjectID string      `json:"target_project_id,omitempty"`
 	Spec            ClusterSpec `json:"spec" binding:"required"`
+}
+
+// ValidateGCPInfraID validates that the infrastructure ID meets GCP resource naming
+// constraints when the platform type is GCP. Non-GCP platforms are not affected.
+func (r *ClusterCreateRequest) ValidateGCPInfraID() error {
+	if r.Spec.Platform.Type != "GCP" {
+		return nil
+	}
+
+	infraID := r.Spec.InfraID
+
+	if len(infraID) > MaxInfraIDLength {
+		return fmt.Errorf(
+			"infrastructure ID '%s' is invalid: must be %d characters or less (got %d)",
+			infraID, MaxInfraIDLength, len(infraID),
+		)
+	}
+
+	if !gcpInfraIDRegex.MatchString(infraID) {
+		return fmt.Errorf(
+			"infrastructure ID '%s' is invalid: must start with a lowercase letter "+
+				"and contain only lowercase letters, digits, or hyphens (pattern: %s)",
+			infraID, GCPInfraIDPattern,
+		)
+	}
+
+	return nil
 }
 
 // ClusterUpdateRequest represents a request to update a cluster
