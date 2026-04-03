@@ -791,8 +791,16 @@ definitions:
     properties:
       image:
         type: "string"
+        description: "Release image pullspec (e.g., quay.io/openshift-release-dev/ocp-release@sha256:...)"
       version:
         type: "string"
+        pattern: "^4\\.22\\..+$"
+        description: "Target OCP version (e.g., 4.22.0, 4.22.0-ec.4). Currently only 4.22.x is supported."
+      channelGroup:
+        type: "string"
+        enum: ["stable", "fast", "candidate"]
+        default: "stable"
+        description: "Cincinnati channel group for version resolution. Defaults to stable."
 
   NetworkingSpec:
     type: "object"

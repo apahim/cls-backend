@@ -17,7 +17,15 @@ const (
 	// GCPInfraIDPattern is the regex pattern for valid GCP resource names.
 	// Must start with a lowercase letter, followed by lowercase letters, digits, or hyphens.
 	GCPInfraIDPattern = `^[a-z][-a-z0-9]*$`
+
 )
+
+// Valid channel groups for Cincinnati version resolution.
+var validChannelGroups = map[string]bool{
+	"stable":    true,
+	"fast":      true,
+	"candidate": true,
+}
 
 var gcpInfraIDRegex = regexp.MustCompile(GCPInfraIDPattern)
 
@@ -114,8 +122,9 @@ type WIFServiceAccountsRef struct {
 
 // ReleaseSpec represents the OpenShift release configuration
 type ReleaseSpec struct {
-	Image   string `json:"image"`
-	Version string `json:"version"`
+	Image        string `json:"image"`
+	Version      string `json:"version"`
+	ChannelGroup string `json:"channelGroup,omitempty"`
 }
 
 // NetworkingSpec represents cluster networking configuration
@@ -319,6 +328,31 @@ func (r *ClusterCreateRequest) ValidateGCPInfraID() error {
 				"and contain only lowercase letters, digits, or hyphens (pattern: %s)",
 			infraID, GCPInfraIDPattern,
 		)
+	}
+
+	return nil
+}
+
+// ValidateRelease validates the release spec in the cluster create request.
+// At least one of version or image must be provided. If version is set, it must
+// match the supported version pattern and channelGroup (if provided) must be valid.
+// Defaults channelGroup to "stable" when version is set but channelGroup is empty.
+func (r *ClusterCreateRequest) ValidateRelease() error {
+	release := &r.Spec.Release
+
+	if release.Version == "" && release.Image == "" {
+		return fmt.Errorf("at least one of release.version or release.image must be provided")
+	}
+
+	if release.Version != "" {
+		if release.ChannelGroup == "" {
+			release.ChannelGroup = "stable"
+		} else if !validChannelGroups[release.ChannelGroup] {
+			return fmt.Errorf(
+				"invalid channelGroup '%s': must be one of stable, fast, candidate",
+				release.ChannelGroup,
+			)
+		}
 	}
 
 	return nil

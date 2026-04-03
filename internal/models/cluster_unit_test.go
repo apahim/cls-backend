@@ -252,6 +252,102 @@ func TestStatusAndHealthTypes(t *testing.T) {
 	}
 }
 
+func TestValidateRelease(t *testing.T) {
+	tests := []struct {
+		name             string
+		version          string
+		image            string
+		channelGroup     string
+		wantErr          bool
+		wantChannelGroup string // expected channelGroup after validation
+	}{
+		{
+			name:             "valid version 4.22.0-ec.4",
+			version:          "4.22.0-ec.4",
+			wantErr:          false,
+			wantChannelGroup: "stable",
+		},
+		{
+			name:             "valid version 4.22.0",
+			version:          "4.22.0",
+			wantErr:          false,
+			wantChannelGroup: "stable",
+		},
+		{
+			name:             "valid version with candidate channel",
+			version:          "4.22.0-ec.4",
+			channelGroup:     "candidate",
+			wantErr:          false,
+			wantChannelGroup: "candidate",
+		},
+		{
+			name:             "valid version with fast channel",
+			version:          "4.22.1",
+			channelGroup:     "fast",
+			wantErr:          false,
+			wantChannelGroup: "fast",
+		},
+		{
+			name:             "any version accepted (no pattern enforcement)",
+			version:          "4.21.3",
+			wantErr:          false,
+			wantChannelGroup: "stable",
+		},
+		{
+			name:    "both empty rejected",
+			version: "",
+			image:   "",
+			wantErr: true,
+		},
+		{
+			name:    "image only is valid (backward compatible)",
+			image:   "quay.io/openshift-release-dev/ocp-release:4.22.0-x86_64",
+			wantErr: false,
+		},
+		{
+			name:             "version and image both provided",
+			version:          "4.22.0",
+			image:            "quay.io/openshift-release-dev/ocp-release:4.22.0-x86_64",
+			wantErr:          false,
+			wantChannelGroup: "stable",
+		},
+		{
+			name:         "invalid channelGroup",
+			version:      "4.22.0",
+			channelGroup: "nightly",
+			wantErr:      true,
+		},
+		{
+			name:             "version without channelGroup defaults to stable",
+			version:          "4.23.0",
+			wantErr:          false,
+			wantChannelGroup: "stable",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ClusterCreateRequest{
+				Name: "test-cluster",
+				Spec: ClusterSpec{
+					Release: ReleaseSpec{
+						Image:        tt.image,
+						Version:      tt.version,
+						ChannelGroup: tt.channelGroup,
+					},
+				},
+			}
+
+			err := req.ValidateRelease()
+			utils.AssertError(t, err, tt.wantErr, "ValidateRelease result should match expected")
+
+			if !tt.wantErr && tt.wantChannelGroup != "" {
+				utils.AssertEqual(t, tt.wantChannelGroup, req.Spec.Release.ChannelGroup, "ChannelGroup should match expected")
+			}
+		})
+	}
+}
+
 // Helper function for validation (this would normally be in the cluster.go file)
 func validateCluster(cluster *Cluster) error {
 	if cluster.Name == "" {

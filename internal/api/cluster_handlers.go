@@ -138,6 +138,12 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 		return
 	}
 
+	// Validate release spec (version pattern, channelGroup, at least one required)
+	if err := req.ValidateRelease(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Get user context from middleware
 	userCtx, exists := middleware.GetUserContext(c)
 	if !exists {
