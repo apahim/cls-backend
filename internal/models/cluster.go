@@ -17,7 +17,6 @@ const (
 	// GCPInfraIDPattern is the regex pattern for valid GCP resource names.
 	// Must start with a lowercase letter, followed by lowercase letters, digits, or hyphens.
 	GCPInfraIDPattern = `^[a-z][-a-z0-9]*$`
-
 )
 
 // Valid channel groups for Cincinnati version resolution.
