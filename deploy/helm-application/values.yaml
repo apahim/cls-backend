@@ -154,6 +154,11 @@ config:
   # Authentication
   disableAuth: false
 
+  # Cluster defaults
+  cluster:
+    defaultVersion: "4.22.0-ec.5"
+    defaultChannelGroup: "candidate"
+
   # Reconciliation configuration
   reconciliation:
     enabled: true

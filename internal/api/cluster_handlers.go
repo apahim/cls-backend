@@ -138,7 +138,10 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 		return
 	}
 
-	// Validate release spec (version pattern, channelGroup, at least one required)
+	// Apply defaults before validation
+	h.clusterService.ApplyDefaults(&req)
+
+	// Validate release spec (version, channelGroup required)
 	if err := req.ValidateRelease(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

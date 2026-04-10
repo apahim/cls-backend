@@ -15,6 +15,7 @@ type Config struct {
 	PubSub         PubSubConfig
 	Logging        LoggingConfig
 	Auth           AuthConfig
+	Cluster        ClusterConfig
 	Reconciliation ReconciliationConfig
 	Aggregation    AggregationConfig
 	Metrics        MetricsConfig
@@ -97,6 +98,12 @@ type AuthConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
+// ClusterConfig holds cluster-related configuration
+type ClusterConfig struct {
+	DefaultVersion      string `mapstructure:"default_version"`
+	DefaultChannelGroup string `mapstructure:"default_channel_group"`
+}
+
 // Load loads configuration from environment variables with defaults
 func Load() (*Config, error) {
 	config := &Config{
@@ -131,6 +138,10 @@ func Load() (*Config, error) {
 		},
 		Auth: AuthConfig{
 			Enabled: !getBoolEnv("DISABLE_AUTH", false),
+		},
+		Cluster: ClusterConfig{
+			DefaultVersion:      getEnv("DEFAULT_CLUSTER_VERSION", ""),
+			DefaultChannelGroup: getEnv("DEFAULT_CHANNEL_GROUP", ""),
 		},
 		Reconciliation: ReconciliationConfig{
 			Enabled:       getBoolEnv("RECONCILIATION_ENABLED", true),
@@ -178,6 +189,14 @@ func (c *Config) Validate() error {
 
 	if c.PubSub.ProjectID == "" {
 		return fmt.Errorf("GOOGLE_CLOUD_PROJECT is required")
+	}
+
+	if c.Cluster.DefaultVersion == "" {
+		fmt.Println("WARNING: DEFAULT_CLUSTER_VERSION is not set; clusters without an explicit version will be rejected")
+	}
+
+	if c.Cluster.DefaultChannelGroup == "" {
+		fmt.Println("WARNING: DEFAULT_CHANNEL_GROUP is not set; clusters without an explicit channelGroup will be rejected")
 	}
 
 	return nil

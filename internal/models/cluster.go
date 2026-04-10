@@ -24,6 +24,7 @@ var validChannelGroups = map[string]bool{
 	"stable":    true,
 	"fast":      true,
 	"candidate": true,
+	"eus":       true,
 }
 
 var gcpInfraIDRegex = regexp.MustCompile(GCPInfraIDPattern)
@@ -333,25 +334,24 @@ func (r *ClusterCreateRequest) ValidateGCPInfraID() error {
 }
 
 // ValidateRelease validates the release spec in the cluster create request.
-// At least one of version or image must be provided. If version is set, it must
-// match the supported version pattern and channelGroup (if provided) must be valid.
-// Defaults channelGroup to "stable" when version is set but channelGroup is empty.
+// Both version and channelGroup are required (either provided by the user or
+// applied as defaults by the service layer).
 func (r *ClusterCreateRequest) ValidateRelease() error {
 	release := &r.Spec.Release
 
-	if release.Version == "" && release.Image == "" {
-		return fmt.Errorf("at least one of release.version or release.image must be provided")
+	if release.Version == "" {
+		return fmt.Errorf("release.version is required")
 	}
 
-	if release.Version != "" {
-		if release.ChannelGroup == "" {
-			release.ChannelGroup = "stable"
-		} else if !validChannelGroups[release.ChannelGroup] {
-			return fmt.Errorf(
-				"invalid channelGroup '%s': must be one of stable, fast, candidate",
-				release.ChannelGroup,
-			)
-		}
+	if release.ChannelGroup == "" {
+		return fmt.Errorf("release.channelGroup is required")
+	}
+
+	if !validChannelGroups[release.ChannelGroup] {
+		return fmt.Errorf(
+			"invalid channelGroup '%s': must be one of stable, fast, candidate, eus",
+			release.ChannelGroup,
+		)
 	}
 
 	return nil

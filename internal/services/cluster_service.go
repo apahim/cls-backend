@@ -16,17 +16,31 @@ import (
 
 // ClusterService provides business logic for cluster operations
 type ClusterService struct {
-	repository *database.Repository
-	pubsub     *pubsub.Service
-	logger     *utils.Logger
+	repository          *database.Repository
+	pubsub              *pubsub.Service
+	logger              *utils.Logger
+	defaultVersion      string
+	defaultChannelGroup string
 }
 
 // NewClusterService creates a new cluster service
-func NewClusterService(repository *database.Repository, pubsubService *pubsub.Service) *ClusterService {
+func NewClusterService(repository *database.Repository, pubsubService *pubsub.Service, defaultVersion, defaultChannelGroup string) *ClusterService {
 	return &ClusterService{
-		repository: repository,
-		pubsub:     pubsubService,
-		logger:     utils.NewLogger("cluster_service"),
+		repository:          repository,
+		pubsub:              pubsubService,
+		logger:              utils.NewLogger("cluster_service"),
+		defaultVersion:      defaultVersion,
+		defaultChannelGroup: defaultChannelGroup,
+	}
+}
+
+// ApplyDefaults fills in default values for fields not provided by the user.
+func (s *ClusterService) ApplyDefaults(req *models.ClusterCreateRequest) {
+	if req.Spec.Release.Version == "" && s.defaultVersion != "" {
+		req.Spec.Release.Version = s.defaultVersion
+	}
+	if req.Spec.Release.ChannelGroup == "" && s.defaultChannelGroup != "" {
+		req.Spec.Release.ChannelGroup = s.defaultChannelGroup
 	}
 }
 

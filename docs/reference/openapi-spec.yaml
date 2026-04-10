@@ -798,7 +798,7 @@ definitions:
         description: "Target OCP version (e.g., 4.22.0, 4.22.0-ec.4). Currently only 4.22.x is supported."
       channelGroup:
         type: "string"
-        enum: ["stable", "fast", "candidate"]
+        enum: ["stable", "fast", "candidate", "eus"]
         default: "stable"
         description: "Cincinnati channel group for version resolution. Defaults to stable."
 
