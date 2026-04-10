@@ -94,8 +94,8 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 		return
 	}
 
-	// Verify cluster exists
-	_, err := h.repository.Clusters.GetByID(ctx, req.ClusterID, userEmail)
+	// Verify cluster exists and get its spec
+	cluster, err := h.repository.Clusters.GetByID(ctx, req.ClusterID, userEmail)
 	if err != nil {
 		if err == models.ErrClusterNotFound {
 			c.JSON(http.StatusBadRequest, utils.NewAPIError(
@@ -116,6 +116,11 @@ func (h *NodePoolHandler) CreateNodePool(c *gin.Context) {
 			err.Error(),
 		))
 		return
+	}
+
+	// Inherit release version from parent cluster if not provided
+	if req.Spec.Release.Version == "" {
+		req.Spec.Release.Version = cluster.Spec.Release.Version
 	}
 
 	// Set initial values
@@ -425,6 +430,11 @@ func (h *NodePoolHandler) UpdateNodePool(c *gin.Context) {
 			err.Error(),
 		))
 		return
+	}
+
+	// Preserve release version if not provided in the update
+	if req.Spec.Release.Version == "" {
+		req.Spec.Release.Version = existing.Spec.Release.Version
 	}
 
 	// Track changes for event publishing
