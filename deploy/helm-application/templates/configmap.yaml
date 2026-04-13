@@ -19,6 +19,10 @@ data:
   # Authentication configuration
   DISABLE_AUTH: {{ .Values.config.disableAuth | quote }}
 
+  # Cluster defaults
+  DEFAULT_CLUSTER_VERSION: {{ .Values.config.cluster.defaultVersion | quote }}
+  DEFAULT_CHANNEL_GROUP: {{ .Values.config.cluster.defaultChannelGroup | quote }}
+
   # Pub/Sub configuration (auto-discovered from cloud-resources chart)
   PUBSUB_CLUSTER_EVENTS_TOPIC: {{ include "cls-backend-application.getPubSubTopic" . | quote }}
   PUBSUB_NODEPOOL_EVENTS_TOPIC: {{ include "cls-backend-application.getNodePoolEventsTopic" . | quote }}

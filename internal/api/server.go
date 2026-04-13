@@ -37,7 +37,7 @@ func NewServer(
 	logger := zap.L().Named("api_server")
 
 	// Initialize services
-	clusterService := services.NewClusterService(repository, pubsubService)
+	clusterService := services.NewClusterService(repository, pubsubService, cfg.Cluster.DefaultVersion, cfg.Cluster.DefaultChannelGroup)
 
 	// Initialize handlers
 	clusterHandler := NewClusterHandler(clusterService, repository.Status)

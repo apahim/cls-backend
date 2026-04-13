@@ -252,6 +252,81 @@ func TestStatusAndHealthTypes(t *testing.T) {
 	}
 }
 
+func TestValidateRelease(t *testing.T) {
+	tests := []struct {
+		name         string
+		version      string
+		channelGroup string
+		wantErr      bool
+	}{
+		{
+			name:         "valid version and channel",
+			version:      "4.22.0-ec.4",
+			channelGroup: "stable",
+			wantErr:      false,
+		},
+		{
+			name:         "valid version with candidate channel",
+			version:      "4.22.0-ec.4",
+			channelGroup: "candidate",
+			wantErr:      false,
+		},
+		{
+			name:         "valid version with fast channel",
+			version:      "4.22.1",
+			channelGroup: "fast",
+			wantErr:      false,
+		},
+		{
+			name:         "any version accepted (no pattern enforcement)",
+			version:      "4.21.3",
+			channelGroup: "stable",
+			wantErr:      false,
+		},
+		{
+			name:         "empty version rejected",
+			version:      "",
+			channelGroup: "stable",
+			wantErr:      true,
+		},
+		{
+			name:         "empty channelGroup rejected",
+			version:      "4.22.0",
+			channelGroup: "",
+			wantErr:      true,
+		},
+		{
+			name:         "invalid channelGroup rejected",
+			version:      "4.22.0",
+			channelGroup: "nightly",
+			wantErr:      true,
+		},
+		{
+			name:         "both empty rejected",
+			version:      "",
+			channelGroup: "",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ClusterCreateRequest{
+				Name: "test-cluster",
+				Spec: ClusterSpec{
+					Release: ReleaseSpec{
+						Version:      tt.version,
+						ChannelGroup: tt.channelGroup,
+					},
+				},
+			}
+
+			err := req.ValidateRelease()
+			utils.AssertError(t, err, tt.wantErr, "ValidateRelease result should match expected")
+		})
+	}
+}
+
 // Helper function for validation (this would normally be in the cluster.go file)
 func validateCluster(cluster *Cluster) error {
 	if cluster.Name == "" {
