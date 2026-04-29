@@ -118,6 +118,7 @@ type WIFServiceAccountsRef struct {
 	CloudControllerEmail string `json:"cloudControllerEmail"`
 	StorageEmail         string `json:"storageEmail,omitempty"`
 	ImageRegistryEmail   string `json:"imageRegistryEmail,omitempty"`
+	NetworkEmail         string `json:"networkEmail,omitempty"`
 }
 
 // ReleaseSpec represents the OpenShift release configuration
