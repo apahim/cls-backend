@@ -27,6 +27,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
         prometheus.io/scrape: "true"
         prometheus.io/port: {{ .Values.config.metricsPort | quote }}
         prometheus.io/path: "/metrics"

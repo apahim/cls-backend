@@ -144,18 +144,6 @@ func (c *Client) ensureTopic(topicName string) (*pubsub.Topic, error) {
 		}
 	}
 
-	// Configure topic settings
-	updateConfig := pubsub.TopicConfigToUpdate{
-		RetentionDuration: 24 * time.Hour, // Retain messages for 24 hours
-	}
-
-	if _, err := topic.Update(c.ctx, updateConfig); err != nil {
-		c.logger.Warn("Failed to update topic config",
-			zap.String("topic", topicName),
-			zap.Error(err),
-		)
-	}
-
 	return topic, nil
 }
 
